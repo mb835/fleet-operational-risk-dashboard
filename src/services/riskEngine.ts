@@ -4,9 +4,11 @@ import type {
   RiskLevel,
   RiskReason,
 } from "../types/risk";
+import type { EcoEvent } from "../types/ecoEvent";
 
 export function calculateRisk(
-  vehicle: Vehicle
+  vehicle: Vehicle,
+  ecoEvents?: EcoEvent[]
 ): RiskAssessment {
   let riskScore = 0;
   const reasons: RiskReason[] = [];
@@ -55,8 +57,16 @@ export function calculateRisk(
 
   const minutes = Math.floor(minutesSinceUpdate);
 
-  if (minutesSinceUpdate > 180) {
-    riskScore += 3;
+  // 🔥 Profesionální eskalace rizika
+  if (minutesSinceUpdate > 360) {
+    // 6+ hodin = kritické operační riziko
+    riskScore += 6;
+    reasons.push({
+      type: "noUpdateCritical",
+      value: minutes,
+    });
+  } else if (minutesSinceUpdate > 180) {
+    riskScore += 4;
     reasons.push({
       type: "noUpdate",
       value: minutes,
@@ -73,6 +83,21 @@ export function calculateRisk(
       type: "noUpdate",
       value: minutes,
     });
+  }
+
+  /* -----------------------
+     ECO EVENT RISK
+  ------------------------ */
+
+  if (ecoEvents && ecoEvents.length > 0) {
+    for (const ecoEvent of ecoEvents) {
+      riskScore += ecoEvent.EventSeverity;
+
+      reasons.push({
+        type: "ecoEvent",
+        value: ecoEvent.EventSeverity,
+      });
+    }
   }
 
   /* -----------------------
@@ -98,5 +123,9 @@ export function calculateRisk(
     riskLevel,
     reasons,
     calculatedAt: new Date().toISOString(),
+    position: {
+      latitude: vehicle.LastPosition.Latitude,
+      longitude: vehicle.LastPosition.Longitude,
+    },
   };
 }

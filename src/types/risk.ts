@@ -1,24 +1,18 @@
 export type RiskLevel = "ok" | "warning" | "critical";
 
-/* -------------------------
-   STRUKTUROVANÉ DŮVODY
--------------------------- */
-
 export type RiskReasonType =
   | "speedExtreme"
   | "speedHigh"
   | "speedAboveLimit"
   | "speedSlightlyElevated"
-  | "noUpdate";
+  | "noUpdate"
+  | "noUpdateCritical"
+  | "ecoEvent";
 
 export interface RiskReason {
   type: RiskReasonType;
   value: number;
 }
-
-/* -------------------------
-   HLAVNÍ MODEL
--------------------------- */
 
 export interface RiskAssessment {
   vehicleId: string;
@@ -29,4 +23,8 @@ export interface RiskAssessment {
   riskLevel: RiskLevel;
   reasons: RiskReason[];
   calculatedAt: string;
+  position: {
+    latitude: string;
+    longitude: string;
+  };
 }

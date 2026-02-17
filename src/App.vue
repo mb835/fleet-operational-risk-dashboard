@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from "vue";
 import RiskChart from "./components/RiskChart.vue";
+import FleetMap from "./components/FleetMap.vue";
 import { fetchGroups, fetchVehiclesByGroup } from "./api/fleetApi";
+import { fetchEcoEvents } from "./services/ecoEventsService";
 import { calculateRisk } from "./services/riskEngine";
 import type { Vehicle } from "./types/vehicle";
 import type {
@@ -17,8 +19,6 @@ import type {
 const loading = ref(true);
 const riskAssessments = ref<RiskAssessment[]>([]);
 const currentView = ref<"dashboard" | "map">("dashboard");
-
-/* 🔥 NOVÝ GLOBÁLNÍ FILTR */
 const activeFilter = ref<"all" | RiskLevel>("all");
 
 /* -------------------------
@@ -28,7 +28,6 @@ const activeFilter = ref<"all" | RiskLevel>("all");
 async function loadData() {
   try {
     const groups = await fetchGroups();
-
     if (!groups.length) return;
 
     const groupCode = groups[0].Code;
@@ -36,9 +35,14 @@ async function loadData() {
     const vehicles: Vehicle[] =
       await fetchVehiclesByGroup(groupCode);
 
-    riskAssessments.value = vehicles.map((v) =>
-      calculateRisk(v)
+    const assessments = await Promise.all(
+      vehicles.map(async (vehicle) => {
+        const ecoEvents = await fetchEcoEvents(vehicle.Code);
+        return calculateRisk(vehicle, ecoEvents);
+      })
     );
+
+    riskAssessments.value = assessments;
   } catch (error) {
     console.error("Načítání dat selhalo:", error);
   } finally {
@@ -49,21 +53,30 @@ async function loadData() {
 onMounted(loadData);
 
 /* -------------------------
-   FILTROVANÁ DATA
+   FILTROVANÁ + SEŘAZENÁ DATA
 -------------------------- */
 
 const filteredAssessments = computed(() => {
-  if (activeFilter.value === "all") {
-    return riskAssessments.value;
-  }
+  const base =
+    activeFilter.value === "all"
+      ? riskAssessments.value
+      : riskAssessments.value.filter(
+          (r) => r.riskLevel === activeFilter.value
+        );
 
-  return riskAssessments.value.filter(
-    (r) => r.riskLevel === activeFilter.value
-  );
+  // 🔥 ŘAZENÍ: nejvyšší riskScore nahoře
+  return [...base].sort((a, b) => {
+    if (b.riskScore !== a.riskScore) {
+      return b.riskScore - a.riskScore;
+    }
+
+    // sekundární řazení podle rychlosti
+    return b.speed - a.speed;
+  });
 });
 
 /* -------------------------
-   KPI (z RAW dat!)
+   KPI (RAW DATA)
 -------------------------- */
 
 const totalVehicles = computed(
@@ -90,6 +103,22 @@ const okCount = computed(
       (r) => r.riskLevel === "ok"
     ).length
 );
+
+/* -------------------------
+   OPERATIONAL PRIORITY
+-------------------------- */
+
+const priorityVehicles = computed(() => {
+  const critical = riskAssessments.value.filter(
+    (r) =>
+      r.riskLevel === "critical" ||
+      r.reasons.some((reason) => reason.type === "noUpdateCritical")
+  );
+
+  return critical
+    .sort((a, b) => b.riskScore - a.riskScore)
+    .slice(0, 3);
+});
 
 /* -------------------------
    FORMATOVÁNÍ
@@ -120,6 +149,10 @@ function formatReason(reason: RiskReason): string {
       return `Mírně zvýšená rychlost (${reason.value} km/h)`;
     case "noUpdate":
       return `Bez aktualizace ${reason.value} minut`;
+    case "noUpdateCritical":
+      return `DLOUHÁ neaktivita – ${reason.value} minut`;
+    case "ecoEvent":
+      return `Eco událost (závažnost ${reason.value})`;
     default:
       return "";
   }
@@ -130,16 +163,14 @@ function formatReason(reason: RiskReason): string {
 -------------------------- */
 
 function toggleFilter(level: "all" | RiskLevel) {
-  if (activeFilter.value === level) {
-    activeFilter.value = "all";
-  } else {
-    activeFilter.value = level;
-  }
+  activeFilter.value =
+    activeFilter.value === level ? "all" : level;
 }
 </script>
 
 <template>
   <div class="min-h-screen bg-slate-950 text-slate-200 px-10 py-8">
+
     <!-- HLAVIČKA -->
     <div class="flex justify-between items-start mb-8">
       <div>
@@ -148,6 +179,9 @@ function toggleFilter(level: "all" | RiskLevel) {
         </h1>
         <p class="text-slate-400 text-sm mt-1">
           Aktuální stav rizik v reálném čase
+        </p>
+        <p class="text-slate-500 text-xs mt-2">
+          Systém automaticky zvýrazňuje vozidla s vysokým provozním rizikem.
         </p>
       </div>
 
@@ -178,12 +212,62 @@ function toggleFilter(level: "all" | RiskLevel) {
 
     <!-- DASHBOARD -->
     <div v-else-if="currentView === 'dashboard'">
-      <!-- KPI KARTY (KLIKACÍ) -->
+
+      <!-- OPERATIONAL PRIORITY PANEL -->
+      <div class="bg-slate-900 rounded-xl border border-slate-800 p-6 mb-8">
+        <h2 class="text-lg font-semibold mb-4">
+          Vyžaduje okamžitou pozornost
+        </h2>
+
+        <div v-if="priorityVehicles.length === 0" class="text-slate-500 text-sm">
+          Žádná vozidla momentálně nevyžadují zásah.
+        </div>
+
+        <div v-else class="space-y-3">
+          <div
+            v-for="vehicle in priorityVehicles"
+            :key="vehicle.vehicleId"
+            class="bg-slate-800/50 p-4 rounded-lg border border-slate-700 hover:border-red-500/50 transition"
+          >
+            <div class="flex justify-between items-start">
+              <div class="flex-1">
+                <div class="font-medium text-slate-200 mb-1">
+                  {{ vehicle.vehicleName }}
+                </div>
+                <div class="text-xs text-slate-400 mb-2">
+                  {{ vehicle.spz }}
+                </div>
+                <div class="text-sm text-slate-300">
+                  {{ formatReason(vehicle.reasons[0]) }}
+                </div>
+              </div>
+
+              <div class="flex flex-col items-end gap-2 ml-4">
+                <div
+                  class="text-xl font-bold text-red-400"
+                >
+                  {{ vehicle.riskScore }}
+                </div>
+                <div
+                  v-if="vehicle.reasons.some(r => r.type === 'noUpdateCritical' && r.value > 360)"
+                  class="bg-red-600 text-white text-xs font-semibold px-2 py-1 rounded"
+                >
+                  OFFLINE 6h+
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- KPI -->
       <div class="grid grid-cols-4 gap-6 mb-10">
 
         <div
           class="bg-slate-900 p-6 rounded-xl border cursor-pointer transition"
-          :class="activeFilter === 'all' ? 'border-blue-500' : 'border-slate-800'"
+          :class="activeFilter === 'all'
+            ? 'border-blue-500'
+            : 'border-slate-800'"
           @click="toggleFilter('all')"
         >
           <p class="text-xs text-slate-400 uppercase">
@@ -196,7 +280,9 @@ function toggleFilter(level: "all" | RiskLevel) {
 
         <div
           class="bg-red-900/20 p-6 rounded-xl border cursor-pointer transition"
-          :class="activeFilter === 'critical' ? 'border-red-500' : 'border-red-700'"
+          :class="activeFilter === 'critical'
+            ? 'border-red-500'
+            : 'border-red-700'"
           @click="toggleFilter('critical')"
         >
           <p class="text-xs text-red-400 uppercase">
@@ -209,7 +295,9 @@ function toggleFilter(level: "all" | RiskLevel) {
 
         <div
           class="bg-yellow-900/20 p-6 rounded-xl border cursor-pointer transition"
-          :class="activeFilter === 'warning' ? 'border-yellow-400' : 'border-yellow-700'"
+          :class="activeFilter === 'warning'
+            ? 'border-yellow-400'
+            : 'border-yellow-700'"
           @click="toggleFilter('warning')"
         >
           <p class="text-xs text-yellow-400 uppercase">
@@ -222,7 +310,9 @@ function toggleFilter(level: "all" | RiskLevel) {
 
         <div
           class="bg-green-900/20 p-6 rounded-xl border cursor-pointer transition"
-          :class="activeFilter === 'ok' ? 'border-green-400' : 'border-green-700'"
+          :class="activeFilter === 'ok'
+            ? 'border-green-400'
+            : 'border-green-700'"
           @click="toggleFilter('ok')"
         >
           <p class="text-xs text-green-400 uppercase">
@@ -235,15 +325,15 @@ function toggleFilter(level: "all" | RiskLevel) {
 
       </div>
 
-      <!-- GRAF (filtrovaná data) -->
+      <!-- GRAF -->
       <RiskChart
         :critical="criticalCount"
         :warning="warningCount"
         :ok="okCount"
-        />
+      />
 
       <!-- TABULKA -->
-      <div class="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
+      <div class="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden mt-8">
         <table class="w-full text-sm">
           <thead class="bg-slate-800 text-slate-400 uppercase text-xs">
             <tr>
@@ -313,14 +403,13 @@ function toggleFilter(level: "all" | RiskLevel) {
           </tbody>
         </table>
       </div>
+
     </div>
 
     <!-- MAPA -->
-    <div
-      v-else
-      class="bg-slate-900 p-10 rounded-xl border border-slate-800 text-center"
-    >
-      Zobrazení mapy bude doplněno v další fázi.
+    <div v-else>
+      <FleetMap :assessments="riskAssessments" />
     </div>
+
   </div>
 </template>
