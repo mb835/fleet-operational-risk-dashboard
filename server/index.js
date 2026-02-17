@@ -1,11 +1,18 @@
 import express from "express";
 import fetch from "node-fetch";
 import dotenv from "dotenv";
+import cors from "cors";
 
 dotenv.config();
 
 const app = express();
 const PORT = 3001;
+
+/* ---------------------------
+   MIDDLEWARE
+---------------------------- */
+
+app.use(cors());
 
 /* ---------------------------
    ENV VALIDATION
@@ -79,6 +86,7 @@ app.get("/api/groups", async (_, res) => {
 
 app.get("/api/vehicles/:groupCode", async (req, res) => {
   const { groupCode } = req.params;
+
   await proxyRequest(
     res,
     `${BASE_URL}/vehicles/group/${groupCode}`

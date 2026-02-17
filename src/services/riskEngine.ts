@@ -57,9 +57,7 @@ export function calculateRisk(
 
   const minutes = Math.floor(minutesSinceUpdate);
 
-  // 🔥 Profesionální eskalace rizika
   if (minutesSinceUpdate > 360) {
-    // 6+ hodin = kritické operační riziko
     riskScore += 6;
     reasons.push({
       type: "noUpdateCritical",
@@ -86,18 +84,22 @@ export function calculateRisk(
   }
 
   /* -----------------------
-     ECO EVENT RISK
+     ECO EVENT RISK (AGGREGATED)
   ------------------------ */
 
   if (ecoEvents && ecoEvents.length > 0) {
-    for (const ecoEvent of ecoEvents) {
-      riskScore += ecoEvent.EventSeverity;
+    const totalSeverity = ecoEvents.reduce(
+      (sum, event) => sum + event.EventSeverity,
+      0
+    );
 
-      reasons.push({
-        type: "ecoEvent",
-        value: ecoEvent.EventSeverity,
-      });
-    }
+    riskScore += totalSeverity;
+
+    reasons.push({
+      type: "ecoEvent",
+      value: totalSeverity,
+      count: ecoEvents.length,
+    });
   }
 
   /* -----------------------
@@ -124,8 +126,8 @@ export function calculateRisk(
     reasons,
     calculatedAt: new Date().toISOString(),
     position: {
-      latitude: vehicle.LastPosition.Latitude,
-      longitude: vehicle.LastPosition.Longitude,
+      latitude: vehicle.LastPosition?.Latitude ?? 0,
+      longitude: vehicle.LastPosition?.Longitude ?? 0,
     },
   };
 }

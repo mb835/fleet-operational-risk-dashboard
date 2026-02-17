@@ -12,6 +12,11 @@ export type RiskReasonType =
 export interface RiskReason {
   type: RiskReasonType;
   value: number;
+  /**
+   * Optional count (used for aggregated eco events)
+   * Example: 3 eco events in last 24h
+   */
+  count?: number;
 }
 
 export interface RiskAssessment {
