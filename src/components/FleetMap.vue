@@ -3,6 +3,10 @@ import { ref, onMounted, onUnmounted, watch } from "vue";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
+import "leaflet.markercluster";
+import "leaflet.markercluster/dist/MarkerCluster.css";
+import "leaflet.markercluster/dist/MarkerCluster.Default.css";
+
 import type { RiskAssessment, RiskLevel } from "../types/risk";
 import { getVehicleType, getVehicleTypeCzech } from "../utils/vehicleType";
 import { getVehicleIcon } from "../utils/mapIcons";
@@ -23,7 +27,7 @@ const props = defineProps<Props>();
 
 const mapContainer = ref<HTMLElement | null>(null);
 let mapInstance: L.Map | null = null;
-let markerLayer: L.LayerGroup | null = null;
+let markerLayer: L.MarkerClusterGroup | null = null;
 
 const mapFocus = ref<"europe" | "czech">("europe");
 
@@ -51,7 +55,7 @@ function initMap() {
 
   mapInstance = L.map(mapContainer.value, {
     center: [50.0755, 14.4378],
-    zoom: 7,
+    zoom: 6,
   });
 
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -60,8 +64,13 @@ function initMap() {
     maxZoom: 18,
   }).addTo(mapInstance);
 
-  // 🔥 Bez clusteru – normální vrstva
-  markerLayer = L.layerGroup();
+  // ✅ Marker Cluster místo obyčejné vrstvy
+  markerLayer = L.markerClusterGroup({
+    showCoverageOnHover: false,
+    maxClusterRadius: 60,
+    disableClusteringAtZoom: 12,
+  });
+
   mapInstance.addLayer(markerLayer);
 
   renderMarkers();
@@ -83,7 +92,7 @@ function renderMarkers() {
   });
 
   if (valid.length === 0) {
-    mapInstance.setView([50, 14], 5);
+    mapInstance.setView([50, 14], 5, { animate: false });
     return;
   }
 
@@ -142,14 +151,17 @@ function applyViewport(bounds: L.LatLngBounds, count: number) {
   if (!mapInstance) return;
 
   if (mapFocus.value === "czech") {
-    mapInstance.setView([49.8, 15.5], 7);
+    mapInstance.setView([49.8, 15.5], 7, { animate: false });
     return;
   }
 
   if (count === 1) {
-    mapInstance.setView(bounds.getCenter(), 9);
+    mapInstance.setView(bounds.getCenter(), 9, { animate: false });
   } else {
-    mapInstance.fitBounds(bounds, { padding: [50, 50] });
+    mapInstance.fitBounds(bounds, {
+      padding: [50, 50],
+      animate: false,
+    });
   }
 }
 

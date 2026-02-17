@@ -252,7 +252,7 @@ function toggleFilter(level: "all" | RiskLevel) {
                   v-if="vehicle.reasons.some(r => r.type === 'noUpdateCritical' && r.value > 360)"
                   class="bg-red-600 text-white text-xs font-semibold px-2 py-1 rounded"
                 >
-                  OFFLINE 6h+
+                  Bez komunikace 6h+
                 </div>
               </div>
             </div>
