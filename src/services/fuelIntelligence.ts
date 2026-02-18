@@ -54,9 +54,13 @@ function round1(n: number): number {
  * Iterates consecutive pairs; returns on first match.
  */
 function detectSuddenDrop(snapshots: FuelSnapshot[]): FuelRiskResult | null {
+  if (snapshots.length < 2) return null;
+
   for (let i = 1; i < snapshots.length; i++) {
     const prev = snapshots[i - 1];
     const curr = snapshots[i];
+
+    if (!prev || !curr) continue;
 
     if (
       prev.fuelVolume !== undefined &&
@@ -85,8 +89,12 @@ function detectSuddenDrop(snapshots: FuelSnapshot[]): FuelRiskResult | null {
  * Assumes approximately one entry per minute.
  */
 function detectAbnormalConsumption(snapshots: FuelSnapshot[]): FuelRiskResult | null {
+  if (snapshots.length < 2) return null;
+
   const first = snapshots[0];
   const last  = snapshots[snapshots.length - 1];
+
+  if (!first || !last) return null;
 
   if (
     first.fuelConsumedTotal !== undefined &&

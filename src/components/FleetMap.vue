@@ -2,6 +2,9 @@
 import { ref, onMounted, onUnmounted, watch } from "vue";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import "leaflet.markercluster";
+import "leaflet.markercluster/dist/MarkerCluster.css";
+import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 
 import type { RiskAssessment, RiskLevel } from "../types/risk";
 import { getVehicleType, getVehicleTypeCzech } from "../utils/vehicleType";
@@ -23,10 +26,9 @@ const props = defineProps<Props>();
 -------------------------- */
 
 const mapContainer = ref<HTMLElement | null>(null);
-const mapInstance = ref<L.Map | null>(null);
-let markerLayer: L.LayerGroup | null = null;
-
-const mapFocus = ref<"europe" | "czech">("europe");
+const mapInstance  = ref<L.Map | null>(null);
+const clusterGroup = ref<L.MarkerClusterGroup | null>(null);
+const mapFocus     = ref<"europe" | "czech">("europe");
 
 /* -------------------------
    RISK LABEL
@@ -62,9 +64,12 @@ function initMap() {
     maxZoom: 18,
   }).addTo(mapInstance.value);
 
-  markerLayer = L.layerGroup();
+  clusterGroup.value = L.markerClusterGroup({
+    disableClusteringAtZoom: 10,
+    spiderfyOnMaxZoom: true,
+  });
 
-  mapInstance.value.addLayer(markerLayer);
+  mapInstance.value.addLayer(clusterGroup.value);
 
   renderMarkers();
 }
@@ -74,9 +79,10 @@ function initMap() {
 -------------------------- */
 
 function renderMarkers() {
-  if (!mapInstance.value || !markerLayer) return;
+  const cluster = clusterGroup.value;
+  if (!mapInstance.value || !cluster) return;
 
-  markerLayer.clearLayers();
+  cluster.clearLayers();
 
   const valid = props.assessments.filter((a) => {
     const lat = Number(a.position.latitude);
@@ -130,7 +136,7 @@ function renderMarkers() {
     `;
 
     marker.bindPopup(popupContent);
-    markerLayer!.addLayer(marker);
+    cluster.addLayer(marker);
   });
 
   applyViewport(bounds, valid.length);
@@ -181,6 +187,10 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  if (clusterGroup.value && mapInstance.value) {
+    mapInstance.value.removeLayer(clusterGroup.value);
+    clusterGroup.value = null;
+  }
   if (mapInstance.value) {
     mapInstance.value.remove();
     mapInstance.value = null;
