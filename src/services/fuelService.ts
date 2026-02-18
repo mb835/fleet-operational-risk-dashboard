@@ -92,6 +92,39 @@ function mergeIntoSnapshots(items: RawSensorItem[]): FuelSnapshot[] {
    PUBLIC API
 -------------------------- */
 
+/* -------------------------
+   FUEL ANOMALY — backend-analysed result
+-------------------------- */
+
+export type FuelAnomalyStatus = "normal" | "anomaly" | "insufficient_data";
+
+export interface FuelAnomalyResult {
+  status: FuelAnomalyStatus;
+  severity?: "high" | "low";
+  reason?: string;
+  fuelDrop?: number;
+  durationMinutes?: number;
+  riskImpact?: number;
+}
+
+/**
+ * Calls the server-side anomaly detection endpoint.
+ * All detection logic lives in the backend; this is a thin fetch wrapper.
+ *
+ * Throws on network / API errors — callers should handle gracefully.
+ */
+export async function getFuelAnomaly(
+  vehicleCode: string
+): Promise<FuelAnomalyResult> {
+  const response = await fetch(`/api/vehicle/${vehicleCode}/fuelAnomaly`);
+
+  if (!response.ok) {
+    throw new Error(`Fuel anomaly API error ${response.status}: ${response.statusText}`);
+  }
+
+  return response.json() as Promise<FuelAnomalyResult>;
+}
+
 /**
  * Fetch the last 60 minutes of fuel + speed sensor snapshots
  * for a single vehicle. Returns a chronologically sorted array.

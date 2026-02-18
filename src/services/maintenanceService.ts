@@ -62,6 +62,21 @@ export function getServiceInfo(vehicleId: string): ServiceInfo {
 }
 
 /* -------------------------
+   RISK IMPACT
+-------------------------- */
+
+/**
+ * Returns a risk impact value based on remaining km until next service.
+ * Intended to be added to the vehicle's base risk score in the UI layer.
+ */
+export function calculateServiceRisk(remainingKm: number): number {
+  if (remainingKm <= 0)    return 3;
+  if (remainingKm <= 500)  return 2;
+  if (remainingKm <= 1000) return 1;
+  return 0;
+}
+
+/* -------------------------
    DISPLAY HELPERS
    Used by components — keeps formatting logic out of templates.
 -------------------------- */
