@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch, onMounted, onUnmounted } from "vue";
 import type { AssessmentWithService, RiskLevel } from "../types/risk";
-import { formatKm, serviceStatusLabel, calculateServiceRisk } from "../services/maintenanceService";
+import { formatKm, serviceStatusLabel } from "../services/maintenanceService";
 import { serviceProgressPercent } from "../services/serviceEngine";
-import { getFuelAnomaly } from "../services/fuelService";
-import type { FuelAnomalyResult } from "../services/fuelService";
+import { fetchFuelSnapshots } from "../services/fuelService";
+import { evaluateFuelRisk } from "../services/fuelIntelligence";
+import type { FuelRiskResult } from "../services/fuelIntelligence";
 
 /* -------------------------
    PROPS & EMITS
@@ -74,28 +75,52 @@ function formatRiskLevel(level: RiskLevel): string {
 
 /* -------------------------
    FUEL MONITORING
-   Calls backend anomaly endpoint on drawer open.
-   Cached per vehicleId while the drawer is in use.
+   Fetched lazily when the drawer opens.
+   Cached per vehicleId to avoid re-fetching while same vehicle is shown.
 -------------------------- */
 
-// Module-level cache — survives reactive re-renders, cleared on page reload
-const fuelAnomalyCache = new Map<string, FuelAnomalyResult>();
+// Module-level caches — survive reactive re-renders, cleared on page reload
+const fuelCache          = new Map<string, FuelRiskResult>();
+const fuelTimestampCache = new Map<string, string | null>();
 
-const fuelAnomaly = ref<FuelAnomalyResult | null>(null);
-const fuelLoading = ref(false);
-const fuelError   = ref(false);
+const fuelResult        = ref<FuelRiskResult | null>(null);
+const fuelLastTimestamp = ref<string | null>(null);
+const fuelLoading       = ref(false);
+const fuelError         = ref(false);
 
-// Base score + fuel riskImpact + service riskImpact — reactive because all sources are reactive
-const adjustedRiskScore = computed(() => {
-  const base    = props.assessment?.riskScore ?? 0;
-  const fuel    = fuelAnomaly.value?.riskImpact ?? 0;
-  const service = calculateServiceRisk(svc.value?.remainingKm ?? Infinity);
-  return base + fuel + service;
-});
+/**
+ * Returns the ISO timestamp of the most recent snapshot that carries
+ * a fuel reading, or null when no usable snapshot exists.
+ */
+function extractLastTimestamp(snapshots: ReturnType<typeof Array.prototype.slice>): string | null {
+  for (let i = snapshots.length - 1; i >= 0; i--) {
+    const s = snapshots[i];
+    if (s.fuelVolume !== undefined || s.fuelConsumedTotal !== undefined) {
+      return s.timestamp ?? null;
+    }
+  }
+  return snapshots[snapshots.length - 1]?.timestamp ?? null;
+}
+
+/**
+ * Returns a Czech relative-time string for the "Poslední kontrola" line.
+ * Returns null when the timestamp is absent or unparseable.
+ */
+function formatRelativeTime(isoTime: string | null): string | null {
+  if (!isoTime) return null;
+  const diffMs  = Date.now() - new Date(isoTime).getTime();
+  if (isNaN(diffMs)) return null;
+  const minutes = Math.floor(diffMs / 60_000);
+  if (minutes < 1)  return "právě teď";
+  if (minutes < 60) return `před ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  return `před ${hours} h`;
+}
 
 async function loadFuelData(vehicleId: string): Promise<void> {
-  if (fuelAnomalyCache.has(vehicleId)) {
-    fuelAnomaly.value = fuelAnomalyCache.get(vehicleId)!;
+  if (fuelCache.has(vehicleId)) {
+    fuelResult.value        = fuelCache.get(vehicleId)!;
+    fuelLastTimestamp.value = fuelTimestampCache.get(vehicleId) ?? null;
     return;
   }
 
@@ -103,12 +128,19 @@ async function loadFuelData(vehicleId: string): Promise<void> {
   fuelError.value   = false;
 
   try {
-    const result = await getFuelAnomaly(vehicleId);
-    fuelAnomalyCache.set(vehicleId, result);
-    fuelAnomaly.value = result;
+    const snapshots         = await fetchFuelSnapshots(vehicleId);
+    const result            = evaluateFuelRisk(snapshots);
+    const timestamp         = extractLastTimestamp(snapshots);
+
+    fuelCache.set(vehicleId, result);
+    fuelTimestampCache.set(vehicleId, timestamp);
+
+    fuelResult.value        = result;
+    fuelLastTimestamp.value = timestamp;
   } catch {
-    fuelError.value   = true;
-    fuelAnomaly.value = null;
+    fuelError.value         = true;
+    fuelResult.value        = null;
+    fuelLastTimestamp.value = null;
   } finally {
     fuelLoading.value = false;
   }
@@ -121,24 +153,14 @@ watch(
     if (open && vehicleId) {
       loadFuelData(vehicleId);
     } else if (!open) {
-      // Reset visible state; cache is kept for quick re-open
-      fuelAnomaly.value = null;
-      fuelError.value   = false;
-      fuelLoading.value = false;
+      // Reset visible state; caches are kept for quick re-open
+      fuelResult.value        = null;
+      fuelLastTimestamp.value = null;
+      fuelError.value         = false;
+      fuelLoading.value       = false;
     }
   }
 );
-
-/* -------------------------
-   RISK SCORE HIGHLIGHT
--------------------------- */
-
-const riskChanged = ref(false);
-
-watch(adjustedRiskScore, () => {
-  riskChanged.value = true;
-  setTimeout(() => { riskChanged.value = false; }, 1500);
-});
 
 /* -------------------------
    ACTIONS
@@ -204,11 +226,8 @@ function handleFocusMap() {
             {{ formatRiskLevel(assessment.riskLevel) }}
           </span>
           <div class="text-right">
-            <span
-              class="text-2xl font-bold text-slate-100 inline-block"
-              :class="{ 'risk-highlight': riskChanged }"
-            >
-              {{ adjustedRiskScore }}
+            <span class="text-2xl font-bold text-slate-100">
+              {{ assessment.riskScore }}
             </span>
             <div class="text-[10px] text-slate-500 uppercase">Risk Score</div>
           </div>
@@ -307,54 +326,55 @@ function handleFocusMap() {
               Data paliva nejsou dostupná
             </div>
 
-            <!-- Normal -->
+            <!-- No anomaly -->
             <div
-              v-else-if="fuelAnomaly?.status === 'normal'"
-              class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-900/30 border border-green-700 text-green-400 text-xs font-semibold"
+              v-else-if="fuelResult && fuelResult.severity === 'none'"
             >
-              <span>🟢</span>
-              Palivo v normě
+              <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-900/30 border border-green-700 text-green-400 text-xs font-semibold">
+                <span class="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0"></span>
+                Palivo v normě
+              </div>
+              <p class="mt-2 text-[11px] text-slate-500">
+                Poslední kontrola: {{ formatRelativeTime(fuelLastTimestamp) ?? "Čas kontroly není k dispozici" }}
+              </p>
             </div>
 
-            <!-- Anomaly — high severity -->
+            <!-- Medium severity -->
             <div
-              v-else-if="fuelAnomaly?.status === 'anomaly' && fuelAnomaly.severity === 'high'"
+              v-else-if="fuelResult && fuelResult.severity === 'medium'"
+              class="flex items-start gap-3 px-4 py-3 rounded-lg bg-yellow-900/30 border border-yellow-700"
+            >
+              <span class="text-yellow-400 text-base flex-shrink-0">⚠️</span>
+              <div>
+                <p class="text-xs font-semibold text-yellow-400 mb-0.5">
+                  Zvýšená spotřeba paliva
+                </p>
+                <p class="text-xs text-yellow-300/80">
+                  {{ fuelResult.description ?? "Spotřeba paliva neodpovídá aktuální rychlosti vozidla" }}
+                </p>
+                <p class="mt-1.5 text-[11px] text-yellow-500/60">
+                  Poslední kontrola: {{ formatRelativeTime(fuelLastTimestamp) ?? "Čas kontroly není k dispozici" }}
+                </p>
+              </div>
+            </div>
+
+            <!-- High severity -->
+            <div
+              v-else-if="fuelResult && fuelResult.severity === 'high'"
               class="flex items-start gap-3 px-4 py-3 rounded-lg bg-red-900/30 border border-red-700"
             >
-              <span class="text-base flex-shrink-0">🔴</span>
+              <span class="text-red-400 text-base flex-shrink-0">🚨</span>
               <div>
-                <p class="text-xs font-semibold text-red-400 mb-1">
-                  Kritická anomálie paliva
+                <p class="text-xs font-semibold text-red-400 mb-0.5">
+                  Podezřelý úbytek paliva
                 </p>
                 <p class="text-xs text-red-300/80">
-                  Úbytek {{ fuelAnomaly.fuelDrop }} l během {{ fuelAnomaly.durationMinutes }} min
+                  {{ fuelResult.description ?? "Náhlý pokles objemu paliva bez odpovídající jízdy" }}
+                </p>
+                <p class="mt-1.5 text-[11px] text-red-500/60">
+                  Poslední kontrola: {{ formatRelativeTime(fuelLastTimestamp) ?? "Čas kontroly není k dispozici" }}
                 </p>
               </div>
-            </div>
-
-            <!-- Anomaly — low severity -->
-            <div
-              v-else-if="fuelAnomaly?.status === 'anomaly' && fuelAnomaly.severity === 'low'"
-              class="flex items-start gap-3 px-4 py-3 rounded-lg bg-orange-900/30 border border-orange-700"
-            >
-              <span class="text-base flex-shrink-0">🟠</span>
-              <div>
-                <p class="text-xs font-semibold text-orange-400 mb-1">
-                  Mírná anomálie paliva
-                </p>
-                <p class="text-xs text-orange-300/80">
-                  Úbytek {{ fuelAnomaly.fuelDrop }} l během {{ fuelAnomaly.durationMinutes }} min
-                </p>
-              </div>
-            </div>
-
-            <!-- Insufficient data -->
-            <div
-              v-else-if="fuelAnomaly?.status === 'insufficient_data'"
-              class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-400 text-xs"
-            >
-              <span>⚪</span>
-              Nedostatek dat
             </div>
 
           </div>
@@ -401,15 +421,5 @@ function handleFocusMap() {
 .drawer-enter-from,
 .drawer-leave-to {
   transform: translateX(100%);
-}
-
-@keyframes riskPulse {
-  0%   { transform: scale(1);    opacity: 1;    }
-  50%  { transform: scale(1.15); opacity: 0.85; }
-  100% { transform: scale(1);    opacity: 1;    }
-}
-
-.risk-highlight {
-  animation: riskPulse 1.5s ease;
 }
 </style>

@@ -58,8 +58,6 @@ function detectSuddenDrop(snapshots: FuelSnapshot[]): FuelRiskResult | null {
     const prev = snapshots[i - 1];
     const curr = snapshots[i];
 
-    if (!prev || !curr) continue;
-
     if (
       prev.fuelVolume !== undefined &&
       curr.fuelVolume !== undefined &&
@@ -89,8 +87,6 @@ function detectSuddenDrop(snapshots: FuelSnapshot[]): FuelRiskResult | null {
 function detectAbnormalConsumption(snapshots: FuelSnapshot[]): FuelRiskResult | null {
   const first = snapshots[0];
   const last  = snapshots[snapshots.length - 1];
-
-  if (!first || !last) return null;
 
   if (
     first.fuelConsumedTotal !== undefined &&
