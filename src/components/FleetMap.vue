@@ -3,10 +3,6 @@ import { ref, onMounted, onUnmounted, watch } from "vue";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
-import "leaflet.markercluster";
-import "leaflet.markercluster/dist/MarkerCluster.css";
-import "leaflet.markercluster/dist/MarkerCluster.Default.css";
-
 import type { RiskAssessment, RiskLevel } from "../types/risk";
 import { getVehicleType, getVehicleTypeCzech } from "../utils/vehicleType";
 import { getVehicleIcon } from "../utils/mapIcons";
@@ -28,7 +24,7 @@ const props = defineProps<Props>();
 
 const mapContainer = ref<HTMLElement | null>(null);
 const mapInstance = ref<L.Map | null>(null);
-let markerLayer: L.MarkerClusterGroup | null = null;
+let markerLayer: L.LayerGroup | null = null;
 
 const mapFocus = ref<"europe" | "czech">("europe");
 
@@ -57,6 +53,7 @@ function initMap() {
   mapInstance.value = L.map(mapContainer.value, {
     center: [50.0755, 14.4378],
     zoom: 6,
+    maxZoom: 18,
   });
 
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -65,11 +62,7 @@ function initMap() {
     maxZoom: 18,
   }).addTo(mapInstance.value);
 
-  markerLayer = L.markerClusterGroup({
-    showCoverageOnHover: false,
-    maxClusterRadius: 60,
-    disableClusteringAtZoom: 12,
-  });
+  markerLayer = L.layerGroup();
 
   mapInstance.value.addLayer(markerLayer);
 
@@ -86,8 +79,8 @@ function renderMarkers() {
   markerLayer.clearLayers();
 
   const valid = props.assessments.filter((a) => {
-    const lat = parseFloat(a.position.latitude);
-    const lng = parseFloat(a.position.longitude);
+    const lat = Number(a.position.latitude);
+    const lng = Number(a.position.longitude);
     return !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0;
   });
 
@@ -99,8 +92,8 @@ function renderMarkers() {
   const bounds = L.latLngBounds([]);
 
   valid.forEach((assessment) => {
-    const lat = parseFloat(assessment.position.latitude);
-    const lng = parseFloat(assessment.position.longitude);
+    const lat = Number(assessment.position.latitude);
+    const lng = Number(assessment.position.longitude);
 
     const latLng = L.latLng(lat, lng);
     bounds.extend(latLng);
@@ -109,7 +102,7 @@ function renderMarkers() {
     const vehicleTypeCzech = getVehicleTypeCzech(assessment.vehicleName);
     const icon = getVehicleIcon(vehicleType, assessment.riskLevel);
 
-    const marker = L.marker(latLng, { icon });
+    const marker = L.marker([lat, lng], { icon });
 
     const popupContent = `
       <div style="font-family: system-ui; min-width: 220px;">
