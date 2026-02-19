@@ -254,6 +254,46 @@ function focusVehicleOnMap(assessment: RiskAssessment) {
       </div>
     </div>
 
+    <!-- FILTER BAR (map view only) -->
+    <div v-if="!loading && currentView === 'map'" class="flex gap-2 mb-6">
+      <button
+        class="px-4 py-2 text-sm rounded-lg border transition"
+        :class="activeFilter === 'all'
+          ? 'bg-slate-700 border-slate-500 text-white'
+          : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'"
+        @click="toggleFilter('all')"
+      >
+        Vše
+      </button>
+      <button
+        class="px-4 py-2 text-sm rounded-lg border transition"
+        :class="activeFilter === 'critical'
+          ? 'bg-red-700/40 border-red-500 text-red-300'
+          : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'"
+        @click="toggleFilter('critical')"
+      >
+        Kritické
+      </button>
+      <button
+        class="px-4 py-2 text-sm rounded-lg border transition"
+        :class="activeFilter === 'warning'
+          ? 'bg-yellow-700/40 border-yellow-500 text-yellow-300'
+          : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'"
+        @click="toggleFilter('warning')"
+      >
+        Varování
+      </button>
+      <button
+        class="px-4 py-2 text-sm rounded-lg border transition"
+        :class="activeFilter === 'ok'
+          ? 'bg-green-700/40 border-green-500 text-green-300'
+          : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'"
+        @click="toggleFilter('ok')"
+      >
+        V pořádku
+      </button>
+    </div>
+
     <!-- LOADING -->
     <div v-if="loading" class="text-center py-20">
       Načítání dat...
@@ -484,7 +524,7 @@ function focusVehicleOnMap(assessment: RiskAssessment) {
     <!-- MAPA -->
     <div v-else>
       <FleetMap
-        :assessments="riskAssessments"
+        :assessments="filteredAssessments"
         :focus-coordinates="focusCoordinates"
       />
     </div>
