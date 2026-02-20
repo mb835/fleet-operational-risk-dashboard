@@ -5,6 +5,7 @@ const props = defineProps<{
   criticalCount: number;
   vehiclesWithoutCommunication: number;
   riskTrendIncreasing: boolean;
+  criticalFilterActive: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -87,10 +88,10 @@ function handleCta() {
       </p>
       <button
         type="button"
-        class="mt-3 w-full py-2.5 rounded-lg bg-red-600/80 hover:bg-red-600 text-white text-sm font-medium transition-colors duration-200"
+        class="mt-3 w-full py-2.5 rounded-lg bg-red-600/80 hover:bg-red-600 hover:brightness-110 text-white text-sm font-medium transition-all duration-300 active:scale-95"
         @click="handleCta"
       >
-        Zobrazit ohrožená vozidla
+        {{ criticalFilterActive ? 'Zobrazit všechna vozidla' : 'Zobrazit ohrožená vozidla' }}
       </button>
     </div>
 

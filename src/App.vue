@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from "vue";
+import { ref, onMounted, computed, nextTick } from "vue";
 import RiskChart from "./components/RiskChart.vue";
 import RiskTrendChart from "./components/RiskTrendChart.vue";
 import RiskPredictionCard from "./components/RiskPredictionCard.vue";
@@ -45,6 +45,7 @@ const focusCoordinates = ref<{ latitude: number; longitude: number } | null>(nul
 /* DRAWER STATE */
 const selectedVehicle = ref<AssessmentWithService | null>(null);
 const drawerOpen = ref(false);
+const riskTableRef = ref<HTMLElement | null>(null);
 
 function openDrawer(assessment: AssessmentWithService) {
   selectedVehicle.value = assessment;
@@ -371,6 +372,30 @@ function toggleFilter(level: "all" | RiskLevel) {
     activeFilter.value === level ? "all" : level;
 }
 
+function handleToggleCriticalFilter() {
+  toggleFilter(activeFilter.value === "critical" ? "all" : "critical");
+}
+
+function scrollToRiskTable() {
+  if (riskTableRef.value) {
+    riskTableRef.value.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }
+}
+
+function handleHeroFilterToggle() {
+  if (activeFilter.value === "critical") {
+    activeFilter.value = "all";
+  } else {
+    activeFilter.value = "critical";
+  }
+  nextTick(() => {
+    scrollToRiskTable();
+  });
+}
+
 /* -------------------------
    MAP FOCUS
 -------------------------- */
@@ -531,16 +556,13 @@ function focusVehicleOnMap(assessment: RiskAssessment) {
           </div>
           <div v-if="priorityVehicles.length > 0" class="flex items-center gap-2 shrink-0">
             <button
-              class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-medium transition"
-              @click="toggleFilter('critical')"
+              class="px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 active:scale-95"
+              :class="activeFilter === 'critical'
+                ? 'border border-slate-600 text-slate-400 hover:bg-slate-800'
+                : 'bg-red-600 hover:bg-red-500 text-white'"
+              @click="handleHeroFilterToggle"
             >
-              Zobrazit kritická vozidla
-            </button>
-            <button
-              class="px-4 py-2 rounded-lg border border-slate-600 text-slate-400 hover:bg-slate-800 text-sm font-medium transition"
-              @click="toggleFilter('critical')"
-            >
-              Filtrovat kritická
+              {{ activeFilter === 'critical' ? 'Zobrazit všechna vozidla' : 'Zobrazit pouze kritická vozidla' }}
             </button>
           </div>
         </div>
@@ -557,10 +579,12 @@ function focusVehicleOnMap(assessment: RiskAssessment) {
           <p class="text-xs text-slate-500 mt-1">Vozidel</p>
         </div>
         <div
-          class="rounded-xl border px-5 py-4 cursor-pointer transition"
+          class="rounded-xl border px-5 py-4 cursor-pointer transition duration-300"
           :class="[
-            activeFilter === 'critical' ? 'ring-1 ring-red-500/50 border-red-900/50' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700',
-            criticalCount > 0 && 'shadow-[0_0_20px_rgba(239,68,68,0.08)]',
+            activeFilter === 'critical'
+              ? 'ring-2 ring-red-500/60 border-red-900/50 shadow-[0_0_24px_rgba(239,68,68,0.15)]'
+              : 'border-slate-800 bg-slate-900/80 hover:border-slate-700',
+            activeFilter !== 'critical' && criticalCount > 0 && 'shadow-[0_0_20px_rgba(239,68,68,0.08)]',
           ]"
           @click="toggleFilter('critical')"
         >
@@ -624,7 +648,10 @@ function focusVehicleOnMap(assessment: RiskAssessment) {
           </div>
 
           <!-- Risk Table -->
-          <div class="rounded-xl border border-slate-700/50 bg-slate-900 overflow-hidden">
+          <div
+            ref="riskTableRef"
+            class="rounded-xl border border-slate-700/50 bg-slate-900 overflow-hidden"
+          >
             <h3 class="text-sm font-semibold text-slate-400 uppercase tracking-wider px-6 pt-6 pb-4">
               Riziková vozidla
             </h3>
@@ -739,7 +766,8 @@ function focusVehicleOnMap(assessment: RiskAssessment) {
               :critical-count="criticalCount"
               :vehicles-without-communication="vehiclesWithoutCommunication"
               :risk-trend-increasing="riskTrendIncreasing"
-              @show-at-risk="toggleFilter('critical')"
+              :critical-filter-active="activeFilter === 'critical'"
+              @show-at-risk="handleToggleCriticalFilter"
             />
 
             <!-- Systémový pohled -->
