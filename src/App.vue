@@ -3,6 +3,7 @@ import { ref, onMounted, computed } from "vue";
 import RiskChart from "./components/RiskChart.vue";
 import RiskTrendChart from "./components/RiskTrendChart.vue";
 import RiskPredictionCard from "./components/RiskPredictionCard.vue";
+import PriorityQueueCard from "./components/PriorityQueueCard.vue";
 import FleetMap from "./components/FleetMap.vue";
 import VehicleDetailDrawer from "./components/VehicleDetailDrawer.vue";
 import { fetchGroups, fetchVehiclesByGroup } from "./api/fleetApi";
@@ -761,6 +762,12 @@ function focusVehicleOnMap(assessment: RiskAssessment) {
             :vehicles-without-communication="vehiclesWithoutCommunication"
             :risk-trend-increasing="riskTrendIncreasing"
             @show-at-risk="toggleFilter('critical')"
+          />
+
+          <!-- Prioritní fronta (TOP 5) -->
+          <PriorityQueueCard
+            :assessments="riskAssessments"
+            @resolve="openDrawer"
           />
 
         </div>
