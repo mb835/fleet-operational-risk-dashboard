@@ -210,15 +210,7 @@ watch(mapFocus, () => {
 </script>
 
 <template>
-  <div
-    v-if="props.assessments.length === 0"
-    class="w-full rounded-xl bg-slate-900 flex items-center justify-center"
-    style="height: 600px;"
-  >
-    <p class="text-slate-400">Žádná aktivní vozidla</p>
-  </div>
-
-  <div v-else class="space-y-4">
+  <div class="space-y-4">
     <div class="flex justify-end">
       <div class="flex bg-slate-800 rounded-lg overflow-hidden border border-slate-700">
         <button
@@ -240,8 +232,15 @@ watch(mapFocus, () => {
 
     <div
       ref="mapContainer"
-      class="w-full rounded-xl overflow-hidden"
+      class="w-full rounded-xl overflow-hidden bg-slate-900 relative"
       style="height: 600px;"
-    ></div>
+    >
+      <div
+        v-if="props.assessments.length === 0"
+        class="absolute inset-0 flex items-center justify-center pointer-events-none"
+      >
+        <p class="text-slate-400">Žádná aktivní vozidla</p>
+      </div>
+    </div>
   </div>
 </template>

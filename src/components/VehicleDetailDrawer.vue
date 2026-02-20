@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch, onMounted, onUnmounted } from "vue";
-import type { AssessmentWithService, RiskLevel } from "../types/risk";
+import type { AssessmentWithService, RiskLevel, RiskReason } from "../types/risk";
 import { formatKm, serviceStatusLabel } from "../services/maintenanceService";
 import { fetchFuelSnapshots } from "../services/fuelService";
 import { evaluateFuelRisk } from "../services/fuelIntelligence";
@@ -13,9 +13,10 @@ import type { FuelRiskResult } from "../services/fuelIntelligence";
 interface Props {
   assessment: AssessmentWithService | null;
   open: boolean;
+  weatherRiskEnabled?: boolean;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), { weatherRiskEnabled: false });
 
 const emit = defineEmits<{
   close: [];
@@ -51,6 +52,73 @@ const progressBarClass = computed(() => {
 });
 
 /* -------------------------
+   WEATHER UX
+-------------------------- */
+
+const weatherReasons = computed(() =>
+  (props.assessment?.reasons ?? []).filter((r) => r.type === "weather"),
+);
+
+const weatherImpact = computed(() => {
+  const w = weatherReasons.value[0];
+  if (!w || typeof w.value !== "number") return 0;
+  return w.value;
+});
+
+const visibleReasons = computed(() => {
+  const reasons = props.assessment?.reasons ?? [];
+  return reasons.filter((r) => {
+    const text = reasonText(r);
+    return typeof text === "string" && text.trim().length > 0;
+  });
+});
+
+const showWeatherBadge = computed(
+  () => props.weatherRiskEnabled && weatherImpact.value > 0,
+);
+
+/* -------------------------
+   ANIMATED RISK SCORE
+-------------------------- */
+
+const animatedScore = ref(props.assessment?.riskScore ?? 0);
+const scorePulse = ref(false);
+
+function easeOut(t: number): number {
+  return 1 - Math.pow(1 - t, 3);
+}
+
+function animateScore(start: number, end: number) {
+  const duration = 400;
+  const startTime = performance.now();
+
+  function tick(now: number) {
+    const elapsed = now - startTime;
+    const t = Math.min(1, elapsed / duration);
+    const eased = easeOut(t);
+    const current = start + (end - start) * eased;
+    animatedScore.value = Math.round(current);
+    if (t < 1) requestAnimationFrame(tick);
+  }
+
+  requestAnimationFrame(tick);
+}
+
+watch(
+  () => props.assessment?.riskScore,
+  (newVal) => {
+    if (newVal == null) return;
+    const prev = animatedScore.value;
+    scorePulse.value = true;
+    animateScore(prev, newVal);
+    setTimeout(() => {
+      scorePulse.value = false;
+    }, 400);
+  },
+  { immediate: true }
+);
+
+/* -------------------------
    RISK HELPERS
 -------------------------- */
 
@@ -68,6 +136,52 @@ function formatRiskLevel(level: RiskLevel): string {
     case "warning":  return "Varování";
     case "critical": return "Kritické";
   }
+}
+
+function formatOperationalReason(r: RiskReason): string | null {
+  switch (r.type) {
+    case "noUpdate":
+      return `Bez aktualizace ${r.value} minut`;
+
+    case "noUpdateCritical":
+      return `DLOUHÁ neaktivita – ${r.value} minut`;
+
+    case "speedAboveLimit":
+      return `Rychlost nad limitem (${r.value} km/h)`;
+
+    case "speedHigh":
+      return `Vysoká rychlost (${r.value} km/h)`;
+
+    case "speedExtreme":
+      return `Extrémní rychlost (${r.value} km/h)`;
+
+    case "speedSlightlyElevated":
+      return `Mírně zvýšená rychlost (${r.value} km/h)`;
+
+    case "ecoEvent":
+      return `Eco událost (závažnost ${r.value})`;
+
+    default:
+      return null;
+  }
+}
+
+function formatWeatherReasonDisplay(r: RiskReason): string | null {
+  if (r.value == null || r.value === "") return null;
+  const num = Number(r.value);
+  if (isNaN(num) || num <= 0) return null;
+  return `Počasí: +${r.value} bodů`;
+}
+
+function reasonText(r: RiskReason | null | undefined): string | null {
+  if (!r) return null;
+  const text =
+    r.type === "weather"
+      ? formatWeatherReasonDisplay(r)
+      : formatOperationalReason(r);
+  if (text == null || typeof text !== "string") return null;
+  if (text.trim().length === 0) return null;
+  return text;
 }
 
 /* -------------------------
@@ -222,10 +336,25 @@ function handleFocusMap() {
           >
             {{ formatRiskLevel(assessment.riskLevel) }}
           </span>
-          <div class="text-right">
-            <span class="text-2xl font-bold text-slate-100">
-              {{ assessment.riskScore }}
-            </span>
+          <div
+            class="text-right"
+            :class="{ 'score-pulse': scorePulse }"
+          >
+            <div class="flex items-baseline justify-end gap-2">
+              <span class="text-2xl font-bold text-slate-100 inline-block min-w-[1.5ch]">
+                {{ animatedScore }}
+              </span>
+              <transition name="fade-slide" mode="out-in">
+                <span
+                  v-if="showWeatherBadge"
+                  key="badge"
+                  class="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full"
+                  style="background: rgba(59, 130, 246, 0.15); color: #3B82F6;"
+                >
+                  +{{ weatherImpact }} počasí
+                </span>
+              </transition>
+            </div>
             <div class="text-[10px] text-slate-500 uppercase">Risk Score</div>
           </div>
         </div>
@@ -383,6 +512,26 @@ function handleFocusMap() {
 
           </div>
 
+          <!-- DŮVODY (reasons) -->
+          <div
+            v-if="visibleReasons.length > 0"
+            class="space-y-3"
+          >
+            <h3 class="text-xs font-semibold text-slate-400 uppercase mb-3">
+              Důvody
+            </h3>
+
+            <ul class="reasons-list space-y-1.5 text-sm text-slate-300">
+              <li
+                v-for="reason in visibleReasons"
+                :key="reason.type + String(reason.value)"
+                class="py-1.5 border-b border-slate-800 last:border-0"
+              >
+                {{ reasonText(reason) }}
+              </li>
+            </ul>
+          </div>
+
         </div>
 
         <!-- ACTIONS FOOTER -->
@@ -425,5 +574,49 @@ function handleFocusMap() {
 .drawer-enter-from,
 .drawer-leave-to {
   transform: translateX(100%);
+}
+
+.risk-fade-enter-active,
+.risk-fade-leave-active {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.risk-fade-enter-from,
+.risk-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+.score-pulse {
+  animation: pulseScore 400ms ease;
+}
+@keyframes pulseScore {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: all 250ms ease;
+}
+.fade-slide-enter-from,
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+.fade-slide-enter-to,
+.fade-slide-leave-from {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.reasons-list {
+  list-style: none;
+  padding-left: 0;
+}
+.reasons-list li::before {
+  content: "•";
+  margin-right: 8px;
+  color: #94a3b8;
 }
 </style>

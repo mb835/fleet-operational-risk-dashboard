@@ -108,18 +108,21 @@ export function calculateRisk(
   }
 
   /* -----------------------
-     WEATHER RISK (optional)
+     WEATHER RISK (always compute when data exists; only add to score if enabled)
   ------------------------ */
 
-  if (weatherEnabled && weatherData) {
-    const { weatherRiskBump, reasons: weatherReasons } =
-      calculateWeatherRisk(weatherData);
+  let weatherPoints = 0;
+  if (weatherData) {
+    const { weatherRiskBump } = calculateWeatherRisk(weatherData);
+    weatherPoints = typeof weatherRiskBump === "number" ? weatherRiskBump : 0;
+  }
 
-    riskScore += weatherRiskBump;
+  if (weatherPoints > 0) {
+    reasons.push({ type: "weather", value: weatherPoints });
+  }
 
-    weatherReasons.forEach((reason) => {
-      reasons.push({ type: "weather", value: reason });
-    });
+  if (weatherEnabled) {
+    riskScore += weatherPoints;
   }
 
   /* -----------------------

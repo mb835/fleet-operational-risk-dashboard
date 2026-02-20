@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from "vue";
+import { ref, onMounted, computed, watch } from "vue";
 import RiskChart from "./components/RiskChart.vue";
 import FleetMap from "./components/FleetMap.vue";
 import VehicleDetailDrawer from "./components/VehicleDetailDrawer.vue";
@@ -25,7 +25,6 @@ const riskAssessments = ref<AssessmentWithService[]>([]);
 const currentView = ref<"dashboard" | "map">("dashboard");
 const activeFilter = ref<"all" | RiskLevel>("all");
 const weatherRiskEnabled = ref(false);
-const weatherData = ref<WeatherData | undefined>(undefined);
 
 /* Coordinates to zoom to on the map. Passed down to FleetMap. */
 const focusCoordinates = ref<{ latitude: number; longitude: number } | null>(null);
@@ -62,12 +61,36 @@ async function loadData() {
       vehicles.map(async (vehicle) => {
         try {
           const ecoEvents = await fetchEcoEvents(vehicle.Code);
+
+          let vehicleWeatherData: WeatherData | undefined;
+          const lat = vehicle.LastPosition?.Latitude;
+          const lng = vehicle.LastPosition?.Longitude;
+
+          if (
+            weatherRiskEnabled.value &&
+            lat != null &&
+            lng != null &&
+            String(lat).trim() !== "" &&
+            String(lng).trim() !== ""
+          ) {
+            try {
+              const res = await fetch(
+                `/api/weather?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`
+              );
+              if (res.ok) {
+                vehicleWeatherData = (await res.json()) as WeatherData;
+              }
+            } catch {
+              vehicleWeatherData = undefined;
+            }
+          }
+
           return {
             assessment: calculateRisk(
               vehicle,
               ecoEvents,
-              weatherRiskEnabled.value && weatherData.value ? weatherData.value : undefined,
-              weatherRiskEnabled.value && !!weatherData.value,
+              vehicleWeatherData,
+              !!weatherRiskEnabled.value,
             ),
             vehicle,
           };
@@ -103,6 +126,10 @@ async function loadData() {
 }
 
 onMounted(loadData);
+
+watch(weatherRiskEnabled, async () => {
+  await loadData();
+});
 
 /* -------------------------
    FILTROVANÁ + SEŘAZENÁ DATA
@@ -189,26 +216,97 @@ function formatRiskLevel(level: RiskLevel): string {
   }
 }
 
-function formatReason(reason: RiskReason): string {
+function formatReason(reason: RiskReason): string | null {
   switch (reason.type) {
-    case "speedExtreme":
-      return `Extrémní rychlost (${reason.value} km/h)`;
-    case "speedHigh":
-      return `Vysoká rychlost (${reason.value} km/h)`;
+    case "noUpdate":
+      return `Bez komunikace – ${reason.value} minut`;
+
+    case "noUpdateCritical":
+      return `Dlouhá neaktivita – ${reason.value} minut`;
+
     case "speedAboveLimit":
       return `Rychlost nad limitem (${reason.value} km/h)`;
+
+    case "speedHigh":
+      return `Vysoká rychlost (${reason.value} km/h)`;
+
+    case "speedExtreme":
+      return `Extrémní rychlost (${reason.value} km/h)`;
+
     case "speedSlightlyElevated":
       return `Mírně zvýšená rychlost (${reason.value} km/h)`;
-    case "noUpdate":
-      return `Bez aktualizace ${reason.value} minut`;
-    case "noUpdateCritical":
-      return `DLOUHÁ neaktivita – ${reason.value} minut`;
+
     case "ecoEvent":
-      return `Eco událost (závažnost ${reason.value})`;
+      return `ECO událost (závažnost ${reason.value})`;
+
+    case "weather":
+      return typeof reason.value === "number" && reason.value > 0
+        ? `🌧 Počasí: +${reason.value} bodů`
+        : null;
+
     default:
-      return "";
+      return `Neznámý důvod (${reason.type})`;
   }
 }
+
+function getReasonMeta(reason: RiskReason): {
+  text: string;
+  icon: string;
+  colorClass: string;
+} {
+  const text = formatReason(reason) ?? "";
+  let icon = "•";
+  let colorClass = "text-slate-300";
+
+  switch (reason.type) {
+    case "noUpdate":
+      icon = "⏱";
+      break;
+    case "noUpdateCritical":
+      icon = "⏱";
+      colorClass = "text-red-400";
+      break;
+    case "speedExtreme":
+      icon = "🚗";
+      colorClass = "text-red-400";
+      break;
+    case "speedHigh":
+    case "speedAboveLimit":
+      icon = "🚗";
+      colorClass = "text-orange-400";
+      break;
+    case "speedSlightlyElevated":
+      icon = "🚗";
+      colorClass = "text-yellow-400";
+      break;
+    case "ecoEvent":
+      icon = "⚠";
+      colorClass = "text-purple-400";
+      break;
+    case "weather":
+      icon = "🌧";
+      colorClass = "text-blue-400";
+      break;
+  }
+
+  return { text, icon, colorClass };
+}
+
+function getReasonClass(reason: RiskReason): string {
+  if (reason.type === "weather") {
+    return weatherRiskEnabled.value
+      ? "text-blue-400"
+      : "text-slate-500 opacity-70";
+  }
+  if (reason.type === "noUpdateCritical") {
+    return "text-red-400";
+  }
+  if (reason.type === "ecoEvent") {
+    return "text-yellow-400";
+  }
+  return "";
+}
+
 
 /* -------------------------
    KLIK NA KPI
@@ -521,17 +619,24 @@ function focusVehicleOnMap(assessment: RiskAssessment) {
                 >
                   <li
                     v-for="reason in assessment.reasons"
-                    :key="reason.type + reason.value"
+                    :key="reason.type + String(reason.value)"
+                    :class="getReasonClass(reason)"
                   >
                     {{ formatReason(reason) }}
+                    <span
+                      v-if="reason.type === 'weather' && !weatherRiskEnabled"
+                      class="text-slate-500 ml-2"
+                    >
+                      (nezohledněno)
+                    </span>
                   </li>
                 </ul>
 
                 <div
                   v-else
-                  class="text-slate-500 text-xs"
+                  class="text-slate-500 text-xs italic"
                 >
-                  Bez rizikových událostí
+                  ✓ Bez rizikových událostí
                 </div>
               </td>
             </tr>
@@ -569,6 +674,12 @@ function focusVehicleOnMap(assessment: RiskAssessment) {
         </span>
 
         <span
+          :class="weatherRiskEnabled ? 'weather-active' : 'weather-inactive'"
+        >
+          {{ weatherRiskEnabled ? 'Aktivní' : 'Neaktivní' }}
+        </span>
+
+        <span
           class="text-slate-500 cursor-help text-sm"
           title="Přidá kontextový rizikový faktor podle aktuálního počasí v lokaci vozidla."
         >ⓘ</span>
@@ -586,8 +697,23 @@ function focusVehicleOnMap(assessment: RiskAssessment) {
   <VehicleDetailDrawer
     :assessment="selectedVehicle"
     :open="drawerOpen"
+    :weather-risk-enabled="weatherRiskEnabled"
     @close="drawerOpen = false"
     @focus-map="handleFocusFromDrawer"
   />
 
 </template>
+
+<style scoped>
+.weather-active {
+  color: #38bdf8;
+  font-weight: 600;
+  margin-left: 8px;
+  transition: all 0.3s ease;
+}
+.weather-inactive {
+  color: #64748b;
+  margin-left: 8px;
+  transition: all 0.3s ease;
+}
+</style>
