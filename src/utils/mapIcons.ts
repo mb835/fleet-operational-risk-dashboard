@@ -1,5 +1,5 @@
 import L from "leaflet";
-import type { RiskLevel } from "../types/risk";
+import type { RiskLevel, ServiceStatus } from "../types/risk";
 import type { VehicleType } from "./vehicleType";
 
 /* -------------------------
@@ -37,7 +37,8 @@ const pulseStyle = `
 
 function createIcon(
   vehicleType: VehicleType,
-  riskLevel: RiskLevel
+  riskLevel: RiskLevel,
+  serviceStatus?: ServiceStatus
 ): L.DivIcon {
 
   const color = getRiskColor(riskLevel);
@@ -70,21 +71,38 @@ function createIcon(
   // Critical markers are rendered larger so they stand out at a glance
   if (riskLevel === "critical") size += 10;
 
+  const innerHtml = `
+    <style>${pulse ? pulseStyle : ""}</style>
+    <div style="
+      font-size: 32px;
+      line-height: 32px;
+      text-align: center;
+      color: ${color};
+      ${pulse ? "animation:pulse 1.2s infinite;" : ""}
+      font-family: 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif;
+    ">
+      ${emoji}
+    </div>
+  `;
+
+  const showBadge = serviceStatus === "warning" || serviceStatus === "critical";
+  const badgeBg =
+    serviceStatus === "critical"
+      ? "background:#ef4444;"
+      : serviceStatus === "warning"
+        ? "background:#eab308;"
+        : "";
+
+  const html = showBadge
+    ? `<div style="position:relative;width:${size}px;height:${size}px;">
+         ${innerHtml}
+         <div style="position:absolute;top:-2px;right:-2px;width:16px;height:16px;border-radius:50%;${badgeBg}display:flex;align-items:center;justify-content:center;font-size:10px;">🛠</div>
+       </div>`
+    : innerHtml;
+
   return L.divIcon({
     className: "vehicle-emoji-icon",
-    html: `
-      <style>${pulse ? pulseStyle : ""}</style>
-      <div style="
-        font-size: 32px;
-        line-height: 32px;
-        text-align: center;
-        color: ${color};
-        ${pulse ? "animation:pulse 1.2s infinite;" : ""}
-        font-family: 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif;
-      ">
-        ${emoji}
-      </div>
-    `,
+    html,
     iconSize: [size, size],
     iconAnchor: [size / 2, size - 6],
     popupAnchor: [0, -size + 8],
@@ -99,13 +117,15 @@ const iconCache = new Map<string, L.DivIcon>();
 
 export function getVehicleIcon(
   vehicleType: VehicleType,
-  riskLevel: RiskLevel
+  riskLevel: RiskLevel,
+  serviceStatus?: ServiceStatus
 ): L.DivIcon {
 
-  const key = `${vehicleType}-${riskLevel}`;
+  const statusKey = serviceStatus ?? "ok";
+  const key = `${vehicleType}-${riskLevel}-${statusKey}`;
 
   if (!iconCache.has(key)) {
-    iconCache.set(key, createIcon(vehicleType, riskLevel));
+    iconCache.set(key, createIcon(vehicleType, riskLevel, serviceStatus));
   }
 
   return iconCache.get(key)!;

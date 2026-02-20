@@ -528,6 +528,12 @@ function handleFocusMap() {
                 class="py-1.5 border-b border-slate-800 last:border-0"
               >
                 {{ reasonText(reason) }}
+                <span
+                  v-if="reason.type === 'weather' && !props.weatherRiskEnabled"
+                  class="text-slate-500 ml-2"
+                >
+                  (nezohledněno)
+                </span>
               </li>
             </ul>
           </div>

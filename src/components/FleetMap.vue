@@ -127,7 +127,7 @@ function renderMarkers() {
 
     const vehicleType = getVehicleType(assessment.vehicleName);
     const vehicleTypeCzech = getVehicleTypeCzech(assessment.vehicleName);
-    const icon = getVehicleIcon(vehicleType, assessment.riskLevel);
+    const icon = getVehicleIcon(vehicleType, assessment.riskLevel, assessment.serviceInfo?.serviceStatus)
 
     const weatherReason = assessment.reasons.find((r) => r.type === "weather");
     const weatherContribution =

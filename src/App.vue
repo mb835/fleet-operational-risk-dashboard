@@ -193,6 +193,15 @@ const okCount = computed(
     ).length
 );
 
+const weatherImpactedCount = computed(() =>
+  riskAssessments.value.filter((r) =>
+    weatherRiskEnabled.value &&
+    r.reasons.some(
+      (reason) => reason.type === "weather" && Number(reason.value) > 0
+    )
+  ).length
+);
+
 /* -------------------------
    OPERATIONAL PRIORITY
 -------------------------- */
@@ -568,6 +577,23 @@ function focusVehicleOnMap(assessment: RiskAssessment) {
         :warning="warningCount"
         :ok="okCount"
       />
+
+      <div
+        v-if="weatherRiskEnabled"
+        class="mt-8 bg-slate-900/60 border border-blue-500/30 rounded-lg p-4"
+      >
+        <p class="text-base font-medium text-blue-300">
+          <template v-if="weatherImpactedCount > 0">
+            🌧 {{ weatherImpactedCount }} vozidel ovlivněno počasím
+          </template>
+          <template v-else>
+            🌧 Žádná vozidla aktuálně ovlivněna počasím
+          </template>
+        </p>
+        <p class="text-xs text-slate-400 mt-2">
+          Riziko zohledňuje aktuální meteorologické podmínky v lokaci vozidla.
+        </p>
+      </div>
 
       <!-- TABULKA -->
       <div class="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden mt-8">
