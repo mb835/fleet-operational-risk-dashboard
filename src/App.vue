@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from "vue";
 import RiskChart from "./components/RiskChart.vue";
 import RiskTrendChart from "./components/RiskTrendChart.vue";
+import RiskPredictionCard from "./components/RiskPredictionCard.vue";
 import FleetMap from "./components/FleetMap.vue";
 import VehicleDetailDrawer from "./components/VehicleDetailDrawer.vue";
 import { fetchGroups, fetchVehiclesByGroup } from "./api/fleetApi";
@@ -194,53 +195,9 @@ const okCount = computed(
     ).length
 );
 
-const weatherImpactedCount = computed(() =>
-  riskAssessments.value.filter((r) =>
-    weatherRiskEnabled.value &&
-    r.reasons.some(
-      (reason) => reason.type === "weather" && Number(reason.value) > 0
-    )
-  ).length
-);
-
-const serviceNearCount = computed(() =>
-  riskAssessments.value.filter(
-    (r) => r.serviceInfo.serviceStatus === "warning" || r.serviceInfo.serviceStatus === "critical"
-  ).length
-);
-
-const noUpdate6hCount = computed(() =>
-  riskAssessments.value.filter((r) =>
-    r.reasons.some(
-      (reason) => reason.type === "noUpdateCritical" && Number(reason.value) >= 360
-    )
-  ).length
-);
-
 const highestRiskVehicle = computed(() => {
   const p = priorityVehicles.value;
   return p.length > 0 ? p[0] : null;
-});
-
-const serviceNearWarningCount = computed(() =>
-  riskAssessments.value.filter((r) => r.serviceInfo.serviceStatus === "warning").length
-);
-
-const ecoEventCount = computed(() =>
-  riskAssessments.value.reduce((sum, r) => {
-    const eco = r.reasons.find((x) => x.type === "ecoEvent");
-    return sum + (eco?.count ?? (eco ? 1 : 0));
-  }, 0)
-);
-
-const actionRecommendation = computed(() => {
-  if (noUpdate6hCount.value > 0) {
-    return "Doporučení: Zkontrolujte vozidla bez komunikace.";
-  }
-  if (criticalCount.value > 0) {
-    return "Doporučení: Zkontrolujte kritická vozidla.";
-  }
-  return "Doporučení: Provoz je stabilní.";
 });
 
 const mockTrendData = computed(() => {
@@ -252,20 +209,6 @@ const mockTrendData = computed(() => {
     critical: Math.max(0, crit + seed(crit || 1, i)),
     warning: Math.max(0, warn + seed(warn || 1, i + 10)),
   }));
-});
-
-const timeSinceLastCriticalUpdate = computed(() => {
-  const critical = riskAssessments.value.filter((r) => r.riskLevel === "critical");
-  if (critical.length === 0) return null;
-  const latest = critical.reduce((acc, r) => {
-    const t = new Date(r.calculatedAt).getTime();
-    return t > acc ? t : acc;
-  }, 0);
-  const mins = Math.floor((Date.now() - latest) / 60000);
-  if (mins < 1) return "méně než minutu";
-  if (mins < 60) return `před ${mins} minutami`;
-  const h = Math.floor(mins / 60);
-  return `před ${h} hodinami`;
 });
 
 const riskFactorTotals = computed(() => {
@@ -293,20 +236,58 @@ const riskFactorMax = computed(() => {
   return Math.max(1, t.speedTotal, t.noUpdateTotal, t.ecoTotal, t.weatherTotal);
 });
 
+const vehiclesWithoutCommunication = computed(() =>
+  riskAssessments.value.filter((r) =>
+    r.reasons.some(
+      (reason) =>
+        reason.type === "noUpdateCritical" ||
+        (reason.type === "noUpdate" && Number(reason.value) >= 60)
+    )
+  ).length
+);
+
+const riskTrendIncreasing = computed(() => {
+  const data = mockTrendData.value;
+  if (data.length < 2) return false;
+  const today = data[data.length - 1];
+  const yesterday = data[data.length - 2];
+  const todayTotal = (today?.critical ?? 0) + (today?.warning ?? 0);
+  const yesterdayTotal = (yesterday?.critical ?? 0) + (yesterday?.warning ?? 0);
+  return todayTotal > yesterdayTotal;
+});
+
 const systemInsight = computed(() => {
-  const { speedTotal, noUpdateTotal, ecoTotal, weatherTotal } = riskFactorTotals.value;
+  const { speedTotal, noUpdateTotal } = riskFactorTotals.value;
   if (criticalCount.value === 0) {
     return "Provoz je stabilní bez kritických stavů.";
   }
-  const parts: string[] = [];
-  if (noUpdateTotal > ecoTotal && noUpdateTotal > speedTotal && noUpdateTotal > 0) {
-    parts.push("Hlavní riziko systému je ztráta komunikace vozidel.");
+  if (noUpdateTotal > speedTotal && noUpdateTotal > 0) {
+    return "Hlavní zdroj rizika: ztráta komunikace vozidel.";
   }
-  if (weatherTotal > 0 && weatherRiskEnabled.value) {
-    parts.push("Počasí aktuálně zvyšuje provozní riziko.");
+  if (speedTotal > 0) {
+    return "Hlavní zdroj rizika: překročení rychlosti.";
   }
-  return parts.length > 0 ? parts.join(" ") : "Provoz vyžaduje pozornost.";
+  return "Provoz vyžaduje pozornost.";
 });
+
+const lastUpdateText = computed(() => {
+  const all = riskAssessments.value;
+  if (all.length === 0) return null;
+  const latest = all.reduce((acc, r) => {
+    const t = new Date(r.calculatedAt).getTime();
+    return t > acc ? t : acc;
+  }, 0);
+  const mins = Math.floor((Date.now() - latest) / 60000);
+  if (mins < 1) return "před 1 minutou";
+  if (mins < 60) return `před ${mins} minutami`;
+  const h = Math.floor(mins / 60);
+  return `před ${h} hodinami`;
+});
+
+function getMainReason(assessment: AssessmentWithService): string | null {
+  const r = assessment.reasons[0];
+  return r ? formatReason(r) : null;
+}
 
 /* -------------------------
    OPERATIONAL PRIORITY
@@ -327,19 +308,6 @@ const priorityVehicles = computed(() => {
 /* -------------------------
    FORMATOVÁNÍ
 -------------------------- */
-
-function formatRiskLevel(level: RiskLevel): string {
-  switch (level) {
-    case "ok":
-      return "V pořádku";
-    case "warning":
-      return "Varování";
-    case "critical":
-      return "Kritické";
-    default:
-      return "";
-  }
-}
 
 function formatReason(reason: RiskReason): string | null {
   switch (reason.type) {
@@ -372,64 +340,6 @@ function formatReason(reason: RiskReason): string | null {
     default:
       return `Neznámý důvod (${reason.type})`;
   }
-}
-
-function getReasonMeta(reason: RiskReason): {
-  text: string;
-  icon: string;
-  colorClass: string;
-} {
-  const text = formatReason(reason) ?? "";
-  let icon = "•";
-  let colorClass = "text-slate-300";
-
-  switch (reason.type) {
-    case "noUpdate":
-      icon = "⏱";
-      break;
-    case "noUpdateCritical":
-      icon = "⏱";
-      colorClass = "text-red-400";
-      break;
-    case "speedExtreme":
-      icon = "🚗";
-      colorClass = "text-red-400";
-      break;
-    case "speedHigh":
-    case "speedAboveLimit":
-      icon = "🚗";
-      colorClass = "text-orange-400";
-      break;
-    case "speedSlightlyElevated":
-      icon = "🚗";
-      colorClass = "text-yellow-400";
-      break;
-    case "ecoEvent":
-      icon = "⚠";
-      colorClass = "text-purple-400";
-      break;
-    case "weather":
-      icon = "🌧";
-      colorClass = "text-blue-400";
-      break;
-  }
-
-  return { text, icon, colorClass };
-}
-
-function getReasonClass(reason: RiskReason): string {
-  if (reason.type === "weather") {
-    return weatherRiskEnabled.value
-      ? "text-blue-400"
-      : "text-slate-500 opacity-70";
-  }
-  if (reason.type === "noUpdateCritical") {
-    return "text-red-400";
-  }
-  if (reason.type === "ecoEvent") {
-    return "text-yellow-400";
-  }
-  return "";
 }
 
 function getPrimaryBadges(assessment: AssessmentWithService): { label: string; colorClass: string }[] {
@@ -589,98 +499,91 @@ function focusVehicleOnMap(assessment: RiskAssessment) {
     <!-- DASHBOARD -->
     <div v-else-if="currentView === 'dashboard'" class="space-y-10">
 
-      <!-- 1) EXECUTIVE ALERT PANEL -->
+      <!-- 1) HERO SECTION -->
       <div
-        class="rounded-xl border border-slate-700/50 p-6 transition cursor-pointer"
+        class="rounded-xl border border-slate-700/50 p-6 transition"
         :class="priorityVehicles.length > 0
           ? 'bg-gradient-to-r from-red-900/30 to-transparent border-l-4 border-l-red-500'
           : 'bg-slate-900'"
-        @click="priorityVehicles.length > 0 && toggleFilter('critical')"
       >
         <div class="flex items-center justify-between gap-6">
-          <div class="min-w-0 flex items-start gap-3">
-            <span v-if="priorityVehicles.length > 0" class="text-2xl shrink-0">🚨</span>
-            <div>
-              <h2 class="text-base font-semibold text-slate-100">
-                {{ priorityVehicles.length > 0 ? 'Vyžaduje okamžitou pozornost' : 'Přehled rizik' }}
-              </h2>
-              <p v-if="priorityVehicles.length === 0" class="text-slate-500 text-sm mt-1">
-                Žádná kritická vozidla.
-              </p>
-              <template v-else>
-                <p class="text-slate-200 font-medium mt-1">
-                  {{ criticalCount }} {{ criticalCount === 1 ? 'kritické vozidlo' : 'kritická vozidla' }} vyžadují zásah
-                </p>
-                <p class="text-slate-400 text-sm mt-0.5">
-                  Nejvyšší riziko: {{ highestRiskVehicle?.vehicleName ?? '' }} ({{ highestRiskVehicle?.riskScore ?? 0 }} bodů)
-                </p>
-                <p v-if="timeSinceLastCriticalUpdate" class="text-slate-500 text-xs mt-0.5">
-                  Poslední změna: {{ timeSinceLastCriticalUpdate }}
-                </p>
-                <p
-                  v-if="weatherRiskEnabled && weatherImpactedCount > 0"
-                  class="text-blue-400/90 text-xs mt-1"
-                >
-                  Počasí ovlivňuje {{ weatherImpactedCount }} {{ weatherImpactedCount === 1 ? 'vozidlo' : 'vozidel' }}
-                </p>
+          <div class="min-w-0">
+            <h2 class="text-lg font-semibold text-slate-100">
+              <template v-if="priorityVehicles.length > 0">
+                ⚠ {{ criticalCount }} {{ criticalCount === 1 ? 'kritické vozidlo' : 'kritická vozidla' }} vyžadují zásah
               </template>
-            </div>
+              <template v-else>
+                Přehled rizik
+              </template>
+            </h2>
+            <p v-if="priorityVehicles.length === 0" class="text-slate-500 text-sm mt-1">
+              Žádná kritická vozidla.
+            </p>
+            <template v-else>
+              <p class="text-slate-400 text-sm mt-0.5">
+                Nejvyšší riziko: {{ highestRiskVehicle?.vehicleName ?? '' }} ({{ highestRiskVehicle?.riskScore ?? 0 }} bodů)
+              </p>
+              <p v-if="lastUpdateText" class="text-slate-500 text-xs mt-1">
+                Poslední aktualizace: {{ lastUpdateText }}
+              </p>
+            </template>
           </div>
-          <button
-            v-if="priorityVehicles.length > 0"
-            class="shrink-0 px-4 py-2 rounded-lg border border-red-500/50 bg-red-500/10 text-red-400 hover:bg-red-500/20 text-sm font-medium transition"
-            @click.stop="toggleFilter('critical')"
-          >
-            Filtrovat kritická
-          </button>
+          <div v-if="priorityVehicles.length > 0" class="flex items-center gap-2 shrink-0">
+            <button
+              class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-medium transition"
+              @click="toggleFilter('critical')"
+            >
+              Zobrazit kritická vozidla
+            </button>
+            <button
+              class="px-4 py-2 rounded-lg border border-slate-600 text-slate-400 hover:bg-slate-800 text-sm font-medium transition"
+              @click="toggleFilter('critical')"
+            >
+              Filtrovat kritická
+            </button>
+          </div>
         </div>
       </div>
 
-      <!-- 2) KPI ROW (compact enterprise metrics) -->
+      <!-- 2) KPI CARDS -->
       <div class="grid grid-cols-4 gap-4">
         <div
-          class="rounded-xl border border-slate-700/50 bg-slate-900 px-5 py-4 cursor-pointer transition hover:border-slate-600/50"
-          :class="activeFilter === 'all' ? 'border-slate-500/50' : ''"
+          class="rounded-xl border border-slate-800 bg-slate-900/80 px-5 py-4 cursor-pointer transition hover:border-slate-700"
+          :class="activeFilter === 'all' ? 'ring-1 ring-slate-600' : ''"
           @click="toggleFilter('all')"
         >
-          <p class="text-2xl font-bold text-slate-100">{{ totalVehicles }}</p>
-          <div class="flex items-center gap-2 mt-1">
-            <span class="w-2 h-2 rounded-full bg-slate-400" />
-            <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium">Celkem vozidel</p>
-          </div>
+          <p class="text-3xl font-bold text-slate-100">{{ totalVehicles }}</p>
+          <p class="text-xs text-slate-500 mt-1">Vozidel</p>
         </div>
         <div
-          class="rounded-xl border border-slate-700/50 bg-slate-900 px-5 py-4 cursor-pointer transition hover:border-slate-600/50"
-          :class="activeFilter === 'critical' ? 'border-red-500/50' : ''"
+          class="rounded-xl border px-5 py-4 cursor-pointer transition"
+          :class="[
+            activeFilter === 'critical' ? 'ring-1 ring-red-500/50 border-red-900/50' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700',
+            criticalCount > 0 && 'shadow-[0_0_20px_rgba(239,68,68,0.08)]',
+          ]"
           @click="toggleFilter('critical')"
         >
-          <p class="text-2xl font-bold text-red-400">{{ criticalCount }}</p>
-          <div class="flex items-center gap-2 mt-1">
-            <span class="w-2 h-2 rounded-full bg-red-400" />
-            <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium">Kritické</p>
-          </div>
+          <p class="text-3xl font-bold text-red-400 flex items-center gap-2">
+            {{ criticalCount }}
+            <span v-if="criticalCount > 0" class="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
+          </p>
+          <p class="text-xs text-slate-500 mt-1">Kritické</p>
         </div>
         <div
-          class="rounded-xl border border-slate-700/50 bg-slate-900 px-5 py-4 cursor-pointer transition hover:border-slate-600/50"
-          :class="activeFilter === 'warning' ? 'border-amber-500/50' : ''"
+          class="rounded-xl border border-slate-800 bg-slate-900/80 px-5 py-4 cursor-pointer transition hover:border-slate-700"
+          :class="activeFilter === 'warning' ? 'ring-1 ring-amber-500/30' : ''"
           @click="toggleFilter('warning')"
         >
-          <p class="text-2xl font-bold text-amber-400">{{ warningCount }}</p>
-          <div class="flex items-center gap-2 mt-1">
-            <span class="w-2 h-2 rounded-full bg-amber-400" />
-            <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium">Varování</p>
-          </div>
+          <p class="text-3xl font-bold text-amber-400">{{ warningCount }}</p>
+          <p class="text-xs text-slate-500 mt-1">Varování</p>
         </div>
         <div
-          class="rounded-xl border border-slate-700/50 bg-slate-900 px-5 py-4 cursor-pointer transition hover:border-slate-600/50"
-          :class="activeFilter === 'ok' ? 'border-emerald-500/50' : ''"
+          class="rounded-xl border border-slate-800 bg-slate-900/80 px-5 py-4 cursor-pointer transition hover:border-slate-700"
+          :class="activeFilter === 'ok' ? 'ring-1 ring-emerald-500/30' : ''"
           @click="toggleFilter('ok')"
         >
-          <p class="text-2xl font-bold text-emerald-400">{{ okCount }}</p>
-          <div class="flex items-center gap-2 mt-1">
-            <span class="w-2 h-2 rounded-full bg-emerald-400" />
-            <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium">V pořádku</p>
-          </div>
+          <p class="text-3xl font-bold text-emerald-400">{{ okCount }}</p>
+          <p class="text-xs text-slate-500 mt-1">OK</p>
         </div>
       </div>
 
@@ -695,6 +598,30 @@ function focusVehicleOnMap(assessment: RiskAssessment) {
               :ok="okCount"
             />
 
+          <!-- Top 3 nejrizikovější vozidla -->
+          <div v-if="priorityVehicles.length > 0">
+            <h3 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">
+              Nejrizikovější vozidla (Top 3)
+            </h3>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div
+                v-for="v in priorityVehicles"
+                :key="v.vehicleId"
+                class="rounded-xl border border-slate-700/50 bg-slate-900/80 p-4 cursor-pointer hover:bg-slate-800/50 transition flex items-center justify-between gap-3"
+                @click="openDrawer(v)"
+              >
+                <div class="min-w-0 flex-1">
+                  <p class="font-medium text-slate-100 truncate">{{ v.vehicleName }}</p>
+                  <p class="text-xs text-slate-500 mt-0.5">{{ v.riskScore }} bodů</p>
+                  <p v-if="getMainReason(v)" class="text-xs text-slate-400 mt-1 truncate">
+                    {{ getMainReason(v) }}
+                  </p>
+                </div>
+                <span class="text-slate-500 shrink-0">→</span>
+              </div>
+            </div>
+          </div>
+
           <!-- Risk Table -->
           <div class="rounded-xl border border-slate-700/50 bg-slate-900 overflow-hidden">
             <h3 class="text-sm font-semibold text-slate-400 uppercase tracking-wider px-6 pt-6 pb-4">
@@ -708,7 +635,6 @@ function focusVehicleOnMap(assessment: RiskAssessment) {
                     <th class="text-left py-3 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Vozidlo</th>
                     <th class="text-left py-3 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Risk score</th>
                     <th class="text-left py-3 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Rychlost</th>
-                    <th class="text-left py-3 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Rizikové faktory</th>
                     <th class="text-right py-3 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Akce</th>
                   </tr>
                 </thead>
@@ -716,7 +642,7 @@ function focusVehicleOnMap(assessment: RiskAssessment) {
                   <tr
                     v-for="assessment in filteredAssessments"
                     :key="assessment.vehicleId"
-                    class="border-t border-slate-800/50 hover:bg-slate-800/30 transition cursor-pointer"
+                    class="group border-t border-slate-800/50 hover:bg-slate-800/40 transition-all duration-200 cursor-pointer"
                     @click="openDrawer(assessment)"
                   >
                     <td
@@ -738,24 +664,7 @@ function focusVehicleOnMap(assessment: RiskAssessment) {
                         >🛠</span>
                       </p>
                       <p class="text-xs text-slate-500 mt-0.5">{{ assessment.spz }}</p>
-                    </td>
-                    <td class="py-4 px-4">
-                      <span
-                        class="inline-flex px-3 py-1.5 rounded-lg text-base font-bold"
-                        :class="{
-                          'bg-emerald-500/15 text-emerald-400': assessment.riskLevel === 'ok',
-                          'bg-amber-500/15 text-amber-400': assessment.riskLevel === 'warning',
-                          'bg-red-500/15 text-red-400': assessment.riskLevel === 'critical',
-                        }"
-                      >
-                        {{ assessment.riskScore }}
-                      </span>
-                    </td>
-                    <td class="py-4 px-4 text-slate-300">
-                      {{ assessment.speed }} km/h
-                    </td>
-                    <td class="py-4 px-4">
-                      <div class="flex flex-wrap gap-1.5">
+                      <div class="flex flex-wrap gap-1.5 mt-2">
                         <span
                           v-for="(badge, i) in getPrimaryBadges(assessment)"
                           :key="i"
@@ -771,9 +680,24 @@ function focusVehicleOnMap(assessment: RiskAssessment) {
                         </span>
                       </div>
                     </td>
+                    <td class="py-4 px-4">
+                      <span
+                        class="inline-flex px-3 py-2 rounded-lg text-lg font-bold transition-all duration-200"
+                        :class="{
+                          'bg-emerald-500/15 text-emerald-400 group-hover:scale-[1.03] group-hover:shadow-[0_0_16px_rgba(16,185,129,0.2)]': assessment.riskLevel === 'ok',
+                          'bg-amber-500/15 text-amber-400 group-hover:scale-[1.03] group-hover:shadow-[0_0_16px_rgba(245,158,11,0.2)]': assessment.riskLevel === 'warning',
+                          'bg-red-500/15 text-red-400 group-hover:scale-[1.03] group-hover:shadow-[0_0_16px_rgba(239,68,68,0.2)]': assessment.riskLevel === 'critical',
+                        }"
+                      >
+                        {{ assessment.riskScore }}
+                      </span>
+                    </td>
+                    <td class="py-4 px-4 text-slate-300">
+                      {{ assessment.speed }} km/h
+                    </td>
                     <td class="py-4 px-4 text-right">
                       <button
-                        class="text-xs text-blue-400 hover:text-blue-300 font-medium"
+                        class="text-xs text-slate-500 hover:text-slate-400 transition-colors duration-200"
                         @click.stop="focusVehicleOnMap(assessment)"
                       >
                         Na mapě
@@ -788,63 +712,35 @@ function focusVehicleOnMap(assessment: RiskAssessment) {
 
         <!-- RIGHT: Context + Action + Trend (30%) -->
         <div class="lg:col-span-3 space-y-6">
-          <!-- Akční přehled (dnes) -->
+          <!-- Systémový pohled (active insight block) -->
           <div class="rounded-xl border border-slate-700/50 bg-slate-900 p-6">
             <h3 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">
-              Akční přehled (dnes)
+              Systémový pohled
             </h3>
-            <div class="space-y-2">
+            <p class="text-sm text-slate-300 mb-4">
+              {{ systemInsight }}
+            </p>
+            <div class="space-y-2.5">
               <div
-                v-if="noUpdate6hCount > 0"
-                class="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-slate-800/50 transition"
+                v-for="row in [
+                  { label: 'Rychlost', color: 'bg-amber-500', value: riskFactorTotals.speedTotal },
+                  { label: 'Bez komunikace', color: 'bg-red-500', value: riskFactorTotals.noUpdateTotal },
+                  { label: 'ECO události', color: 'bg-purple-500', value: riskFactorTotals.ecoTotal },
+                  { label: 'Počasí', color: 'bg-blue-500', value: riskFactorTotals.weatherTotal },
+                ]"
+                :key="row.label"
+                class="flex items-center gap-3"
               >
-                <span class="w-2 h-2 rounded-full bg-red-400 shrink-0" />
-                <span class="text-sm text-slate-300">
-                  <strong class="text-slate-100">{{ noUpdate6hCount }}</strong>
-                  {{ noUpdate6hCount === 1 ? 'vozidlo' : 'vozidel' }} bez komunikace &gt; 6h
-                </span>
+                <span class="text-xs text-slate-400 w-24 shrink-0">{{ row.label }}</span>
+                <span class="text-xs font-medium text-slate-300 w-5">{{ row.value }}</span>
+                <div class="flex-1 h-1.5 rounded-full bg-slate-800 overflow-hidden">
+                  <div
+                    class="h-full rounded-full transition-all duration-300"
+                    :class="row.color"
+                    :style="{ width: `${Math.min(100, (row.value / Math.max(1, riskFactorMax)) * 100)}%` }"
+                  />
+                </div>
               </div>
-              <div
-                v-if="serviceNearWarningCount > 0"
-                class="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-slate-800/50 transition"
-              >
-                <span class="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
-                <span class="text-sm text-slate-300">
-                  <strong class="text-slate-100">{{ serviceNearWarningCount }}</strong>
-                  {{ serviceNearWarningCount === 1 ? 'vozidlo' : 'vozidel' }} blízko servisnímu limitu
-                </span>
-              </div>
-              <div
-                v-if="ecoEventCount > 0"
-                class="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-slate-800/50 transition"
-              >
-                <span class="w-2 h-2 rounded-full bg-purple-400 shrink-0" />
-                <span class="text-sm text-slate-300">
-                  <strong class="text-slate-100">{{ ecoEventCount }}</strong>
-                  {{ ecoEventCount === 1 ? 'ECO událost' : 'ECO událostí' }}
-                </span>
-              </div>
-              <div
-                v-if="weatherRiskEnabled && weatherImpactedCount > 0"
-                class="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-slate-800/50 transition"
-              >
-                <span class="w-2 h-2 rounded-full bg-blue-400 shrink-0" />
-                <span class="text-sm text-slate-300">
-                  <strong class="text-slate-100">{{ weatherImpactedCount }}</strong>
-                  {{ weatherImpactedCount === 1 ? 'vozidlo' : 'vozidel' }} ovlivněno počasím
-                </span>
-              </div>
-            </div>
-            <div class="mt-4 pt-4 border-t border-slate-700/50 bg-slate-800/30 rounded-lg p-3 border border-slate-700/30">
-              <p class="text-sm text-slate-300 mb-3">
-                {{ actionRecommendation }}
-              </p>
-              <button
-                class="w-full py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700 text-xs font-medium transition"
-                @click="toggleFilter('critical')"
-              >
-                Zobrazit kritická vozidla
-              </button>
             </div>
           </div>
 
@@ -859,89 +755,14 @@ function focusVehicleOnMap(assessment: RiskAssessment) {
             </p>
           </div>
 
-          <!-- Rozpad rizika podle faktorů -->
-          <div class="rounded-xl border border-slate-700/50 bg-slate-900 p-6">
-            <h3 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">
-              Rozpad rizika podle faktorů
-            </h3>
-            <div class="space-y-3">
-              <div
-                v-for="row in [
-                  { key: 'speedTotal', label: 'Rychlost', color: 'bg-amber-500', value: riskFactorTotals.speedTotal },
-                  { key: 'noUpdateTotal', label: 'Bez komunikace', color: 'bg-red-500', value: riskFactorTotals.noUpdateTotal },
-                  { key: 'ecoTotal', label: 'ECO události', color: 'bg-purple-500', value: riskFactorTotals.ecoTotal },
-                  { key: 'weatherTotal', label: 'Počasí', color: 'bg-blue-500', value: riskFactorTotals.weatherTotal },
-                ]"
-                :key="row.key"
-                class="flex items-center gap-3"
-              >
-                <span class="text-xs text-slate-400 w-24 shrink-0">{{ row.label }}</span>
-                <span class="text-xs font-medium text-slate-300 w-6">{{ row.value }}</span>
-                <div class="flex-1 h-2 rounded-full bg-slate-800 overflow-hidden">
-                  <div
-                    class="h-full rounded-full transition-all"
-                    :class="row.color"
-                    :style="{ width: `${Math.min(100, (row.value / Math.max(1, riskFactorMax)) * 100)}%` }"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
+          <!-- Predikce rizika (24h) -->
+          <RiskPredictionCard
+            :critical-count="criticalCount"
+            :vehicles-without-communication="vehiclesWithoutCommunication"
+            :risk-trend-increasing="riskTrendIncreasing"
+            @show-at-risk="toggleFilter('critical')"
+          />
 
-          <!-- Systémový pohled -->
-          <div class="rounded-lg border border-slate-700 bg-slate-800 p-4">
-            <h3 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">
-              Systémový pohled
-            </h3>
-            <p class="text-sm text-slate-300">
-              {{ systemInsight }}
-            </p>
-          </div>
-
-          <!-- Kontextové faktory -->
-          <div class="rounded-xl border border-slate-700/50 bg-slate-900 p-6 sticky top-6">
-            <h3 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">
-              Kontextové faktory
-            </h3>
-            <div class="divide-y divide-slate-700/50">
-              <div
-                v-if="weatherRiskEnabled"
-                class="flex items-center gap-3 py-3 first:pt-0"
-              >
-                <span class="text-base">🌧</span>
-                <span class="text-sm text-slate-300">
-                  {{ weatherImpactedCount > 0
-                    ? `${weatherImpactedCount} ${weatherImpactedCount === 1 ? 'vozidlo ovlivněno' : 'vozidel ovlivněno'} počasím`
-                    : 'Žádná vozidla ovlivněna počasím'
-                  }}
-                </span>
-              </div>
-              <div
-                v-if="serviceNearCount > 0"
-                class="flex items-center gap-3 py-3"
-              >
-                <span class="text-base">🛠</span>
-                <span class="text-sm text-slate-300">
-                  {{ serviceNearCount }} {{ serviceNearCount === 1 ? 'vozidlo blízko' : 'vozidel blízko' }} servisu
-                </span>
-              </div>
-              <div
-                v-if="noUpdate6hCount > 0"
-                class="flex items-center gap-3 py-3"
-              >
-                <span class="text-base">📡</span>
-                <span class="text-sm text-slate-300">
-                  {{ noUpdate6hCount }} {{ noUpdate6hCount === 1 ? 'vozidlo' : 'vozidel' }} bez komunikace 6h+
-                </span>
-              </div>
-              <div
-                v-if="!weatherRiskEnabled && serviceNearCount === 0 && noUpdate6hCount === 0"
-                class="py-3"
-              >
-                <p class="text-sm text-slate-500">Žádné kontextové faktory</p>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 
