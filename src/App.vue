@@ -432,19 +432,19 @@ function focusVehicleOnMap(assessment: RiskAssessment) {
           <span class="inline-flex items-center justify-center text-blue-500" aria-hidden="true">
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
+              viewBox="0 0 40 40"
               fill="none"
               stroke="currentColor"
               stroke-width="1.5"
               stroke-linecap="round"
               stroke-linejoin="round"
-              class="h-6 w-6 shrink-0"
+              class="h-7 w-7 shrink-0"
             >
-              <circle cx="12" cy="12" r="9" />
-              <circle cx="13" cy="11" r="2.5" fill="currentColor" />
+              <circle cx="20" cy="20" r="15" />
+              <circle cx="20" cy="20" r="4" fill="currentColor" />
               <g class="radar-sweep">
-                <path d="M 12 3 A 9 9 0 0 0 3 12" stroke="currentColor" stroke-width="0.5" fill="none" opacity="0.35" />
-                <line x1="12" y1="12" x2="12" y2="3" stroke="currentColor" stroke-width="0.5" opacity="0.7" />
+                <path d="M 20 5 A 15 15 0 0 0 5 20" stroke="currentColor" stroke-width="1.6" fill="none" opacity="0.55" />
+                <line x1="20" y1="20" x2="20" y2="5" stroke="currentColor" stroke-width="1.6" opacity="0.9" />
               </g>
             </svg>
           </span>
@@ -913,8 +913,8 @@ function focusVehicleOnMap(assessment: RiskAssessment) {
 
 <style scoped>
 .radar-sweep {
-  transform-origin: 12px 12px;
-  animation: radarSweep 6s linear infinite;
+  transform-origin: 20px 20px;
+  animation: radarSweep 4.5s linear infinite;
 }
 
 @keyframes radarSweep {
