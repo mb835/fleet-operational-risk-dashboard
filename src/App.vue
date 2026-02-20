@@ -634,7 +634,25 @@ function focusVehicleOnMap(assessment: RiskAssessment) {
                   <tr class="border-t border-slate-700/50">
                     <th class="w-1" />
                     <th class="text-left py-3 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider">Vozidlo</th>
-                    <th class="text-center py-3 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider">Risk score</th>
+                    <th class="text-center py-3 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      <span class="relative inline-flex items-center justify-center gap-1 group/risk">
+                        Risk score
+                        <span class="text-slate-400 cursor-help">ⓘ</span>
+                        <span
+                          class="absolute left-1/2 -translate-x-1/2 top-full mt-1.5 z-10 px-3 py-2 w-64 rounded-lg bg-slate-800 border border-slate-700 text-left text-xs text-slate-300 shadow-lg opacity-0 pointer-events-none transition-opacity duration-150 group-hover/risk:opacity-100"
+                        >
+                          Risk score je agregované provozní skóre vypočítané z:
+                          <span class="block mt-1.5">• rychlosti</span>
+                          <span class="block">• ztráty komunikace</span>
+                          <span class="block">• ECO událostí</span>
+                          <span class="block">• počasí (pokud je aktivní)</span>
+                          <span class="block mt-2 font-medium">Rozsahy:</span>
+                          <span class="block">0–2 = OK</span>
+                          <span class="block">3–5 = Varování</span>
+                          <span class="block">6+ = Kritické</span>
+                        </span>
+                      </span>
+                    </th>
                     <th class="text-left py-3 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider">Rychlost</th>
                     <th class="text-right py-3 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider">Akce</th>
                   </tr>
