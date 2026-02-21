@@ -21,7 +21,6 @@ const props = withDefaults(defineProps<Props>(), { weatherRiskEnabled: false });
 const emit = defineEmits<{
   close: [];
   "focus-map": [coords: { latitude: number; longitude: number }];
-  "open-service-detail": [];
 }>();
 
 /* -------------------------
@@ -329,7 +328,7 @@ function handleFocusMap() {
     <Transition name="fade">
       <div
         v-if="open"
-        class="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+        class="drawer-overlay"
         @click="emit('close')"
       />
     </Transition>
@@ -338,16 +337,16 @@ function handleFocusMap() {
     <Transition name="drawer">
       <div
         v-if="open && assessment"
-        class="fixed top-0 right-0 z-50 h-full w-[400px] bg-slate-900 border-l border-slate-700 shadow-2xl flex flex-col overflow-hidden"
+        class="drawer-panel"
       >
 
         <!-- HEADER -->
-        <div class="flex items-start justify-between p-6 border-b border-slate-800">
+        <div class="flex items-start justify-between p-4 border-b border-slate-800">
           <div class="flex-1 min-w-0 pr-4">
-            <h2 class="text-lg font-semibold text-slate-100 truncate">
+            <h2 class="text-base font-semibold text-slate-100 truncate">
               {{ assessment.vehicleName }}
             </h2>
-            <p class="text-sm text-slate-400 mt-0.5">
+            <p class="text-xs text-slate-400 mt-0.5">
               {{ assessment.spz || "Bez SPZ" }}
             </p>
           </div>
@@ -363,16 +362,16 @@ function handleFocusMap() {
         </div>
 
         <!-- SCROLLABLE BODY -->
-        <div class="flex-1 overflow-y-auto p-6 space-y-6">
+        <div class="flex-1 overflow-y-auto p-4 space-y-4">
 
           <!-- ---------------------------------------
                RISK SECTION
           --------------------------------------- -->
           <div
-            class="rounded-lg bg-slate-800/60 pl-4 pr-4 py-4 border-l-4"
+            class="rounded-lg bg-slate-800/60 pl-3 pr-3 py-3 border-l-4"
             :style="{ borderLeftColor: riskBorderColor(assessment.riskLevel) }"
           >
-            <div class="flex items-start justify-between gap-4 mb-3">
+            <div class="flex items-start justify-between gap-3 mb-2">
               <span
                 class="px-3 py-1 rounded-full text-xs font-semibold shrink-0"
                 :class="riskBadgeClass(assessment.riskLevel)"
@@ -388,12 +387,12 @@ function handleFocusMap() {
             </div>
             <ul
               v-if="visibleReasons.length > 0"
-              class="reasons-list space-y-1.5 text-sm text-slate-300 mt-3 pt-3 border-t border-slate-700"
+              class="reasons-list space-y-1 text-xs text-slate-300 mt-2 pt-2 border-t border-slate-700"
             >
               <li
                 v-for="reason in visibleReasons"
                 :key="reason.type + String(reason.value)"
-                class="py-1"
+                class="py-0.5"
               >
                 {{ reasonText(reason) }}
                 <span
@@ -407,29 +406,50 @@ function handleFocusMap() {
           </div>
 
           <!-- ---------------------------------------
-               SERVICE SECTION
+               ŽIVÁ DATA SECTION
+          --------------------------------------- -->
+          <div>
+            <h3 class="text-xs font-semibold text-slate-400 uppercase mb-2">
+              Živá data
+            </h3>
+            <div class="space-y-0">
+              <div class="flex justify-between items-center py-1.5 border-b border-slate-800">
+                <span class="text-xs text-slate-400">Rychlost</span>
+                <span class="text-sm font-medium text-slate-200">{{ assessment.speed }} km/h</span>
+              </div>
+              <div class="flex justify-between items-center py-1.5 border-b border-slate-800">
+                <span class="text-xs text-slate-400">Souřadnice</span>
+                <span class="text-xs font-mono text-slate-400">
+                  {{ assessment.position.latitude }}, {{ assessment.position.longitude }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- ---------------------------------------
+               SERVIS & ÚDRŽBA SECTION
           --------------------------------------- -->
           <div
             v-if="svc"
-            class="rounded-lg pl-4 pr-4 py-4 border border-slate-700/60"
+            class="rounded-lg pl-3 pr-3 py-3 border border-slate-700/60"
             :class="{ 'bg-red-900/15': svc.serviceStatus === 'critical' }"
           >
-            <h3 class="text-xs font-semibold text-slate-400 uppercase mb-3 flex items-center gap-2">
+            <h3 class="text-xs font-semibold text-slate-400 uppercase mb-2 flex items-center gap-2">
               <span>🛠</span>
               <span>Servis &amp; údržba</span>
             </h3>
 
             <div class="space-y-0">
-              <div class="flex justify-between items-center py-2 border-b border-slate-800">
-                <span class="text-sm text-slate-400">Aktuální nájezd</span>
+              <div class="flex justify-between items-center py-1.5 border-b border-slate-800">
+                <span class="text-xs text-slate-400">Aktuální nájezd</span>
                 <span class="text-sm font-medium text-slate-200">{{ formatKm(svc.odometer) }}</span>
               </div>
-              <div class="flex justify-between items-center py-2 border-b border-slate-800">
-                <span class="text-sm text-slate-400">Další servis při</span>
+              <div class="flex justify-between items-center py-1.5 border-b border-slate-800">
+                <span class="text-xs text-slate-400">Další servis při</span>
                 <span class="text-sm font-medium text-slate-200">{{ formatKm(svc.nextServiceAt) }}</span>
               </div>
-              <div class="flex justify-between items-center py-2 border-b border-slate-800">
-                <span class="text-sm text-slate-400">Zbývá</span>
+              <div class="flex justify-between items-center py-1.5 border-b border-slate-800">
+                <span class="text-xs text-slate-400">Zbývá</span>
                 <span
                   class="text-sm font-semibold"
                   :class="{
@@ -443,38 +463,113 @@ function handleFocusMap() {
               </div>
             </div>
 
-            <div class="mt-4">
-              <div class="flex justify-between text-[11px] text-slate-500 mb-1.5">
+            <div class="mt-2">
+              <div class="flex justify-between text-[11px] text-slate-500 mb-1">
                 <span>Interval servisu</span>
                 <span>{{ serviceStatusLabel(svc.serviceStatus) }}</span>
               </div>
 
               <template v-if="progressPercent !== null">
-                <div class="w-full h-2 bg-slate-700 rounded-full overflow-hidden">
+                <div class="w-full h-1.5 bg-slate-700 rounded-full overflow-hidden">
                   <div
                     class="h-full rounded-full transition-all duration-500"
                     :class="progressBarClass"
                     :style="{ width: progressPercent + '%' }"
                   />
                 </div>
-                <div class="text-[10px] text-slate-600 mt-1 text-right">
+                <div class="text-[10px] text-slate-600 mt-0.5 text-right">
                   Využito {{ progressPercent }} % servisního intervalu
                 </div>
               </template>
 
-              <p v-else class="text-[11px] text-slate-500 italic mt-1">
+              <p v-else class="text-[11px] text-slate-500 italic mt-0.5">
                 Interval nelze určit – chybí údaj o posledním servisu
               </p>
             </div>
 
-            <button
+            <div
               v-if="svc.serviceStatus === 'critical'"
-              type="button"
-              class="mt-4 w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-red-900/40 border border-red-700/60 hover:bg-red-900/50 text-red-300 text-sm font-medium transition"
-              @click="emit('open-service-detail')"
+              class="mt-2 px-3 py-1.5 rounded-lg bg-red-500/15 text-red-400 text-xs font-medium border border-red-500/30"
             >
-              Otevřít servisní detail
-            </button>
+              🔴 Servis vyžaduje zásah
+            </div>
+          </div>
+
+          <!-- ---------------------------------------
+               PALIVO SECTION
+          --------------------------------------- -->
+          <div>
+            <h3 class="text-xs font-semibold text-slate-400 uppercase mb-2">
+              ⛽ Palivo
+            </h3>
+
+            <!-- Loading -->
+            <div
+              v-if="fuelLoading"
+              class="text-xs text-slate-500 animate-pulse"
+            >
+              Načítám data paliva…
+            </div>
+
+            <!-- Error -->
+            <div
+              v-else-if="fuelError"
+              class="text-xs text-slate-500 italic"
+            >
+              Data paliva nejsou dostupná
+            </div>
+
+            <!-- No anomaly -->
+            <div
+              v-else-if="fuelResult && fuelResult.severity === 'none'"
+            >
+              <div class="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-green-900/30 border border-green-700 text-green-400 text-xs font-semibold">
+                <span class="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0"></span>
+                Palivo v normě
+              </div>
+              <p class="mt-1 text-[11px] text-slate-500">
+                Poslední kontrola: {{ formatRelativeTime(fuelLastTimestamp) ?? "Čas kontroly není k dispozici" }}
+              </p>
+            </div>
+
+            <!-- Medium severity -->
+            <div
+              v-else-if="fuelResult && fuelResult.severity === 'medium'"
+              class="flex items-start gap-2 px-3 py-2 rounded-lg bg-yellow-900/30 border border-yellow-700"
+            >
+              <span class="text-yellow-400 text-sm flex-shrink-0">⚠️</span>
+              <div>
+                <p class="text-xs font-semibold text-yellow-400 mb-0.5">
+                  Zvýšená spotřeba paliva
+                </p>
+                <p class="text-xs text-yellow-300/80">
+                  {{ fuelResult.description ?? "Spotřeba paliva neodpovídá aktuální rychlosti vozidla" }}
+                </p>
+                <p class="mt-1 text-[11px] text-yellow-500/60">
+                  Poslední kontrola: {{ formatRelativeTime(fuelLastTimestamp) ?? "Čas kontroly není k dispozici" }}
+                </p>
+              </div>
+            </div>
+
+            <!-- High severity -->
+            <div
+              v-else-if="fuelResult && fuelResult.severity === 'high'"
+              class="flex items-start gap-2 px-3 py-2 rounded-lg bg-red-900/30 border border-red-700"
+            >
+              <span class="text-red-400 text-sm flex-shrink-0">🚨</span>
+              <div>
+                <p class="text-xs font-semibold text-red-400 mb-0.5">
+                  Podezřelý úbytek paliva
+                </p>
+                <p class="text-xs text-red-300/80">
+                  {{ fuelResult.description ?? "Náhlý pokles objemu paliva bez odpovídající jízdy" }}
+                </p>
+                <p class="mt-1 text-[11px] text-red-500/60">
+                  Poslední kontrola: {{ formatRelativeTime(fuelLastTimestamp) ?? "Čas kontroly není k dispozici" }}
+                </p>
+              </div>
+            </div>
+
           </div>
 
           <!-- ---------------------------------------
@@ -482,21 +577,21 @@ function handleFocusMap() {
           --------------------------------------- -->
           <div
             v-if="showWeatherSection && assessment?.weatherData"
-            class="rounded-lg pl-4 pr-4 py-4 border border-slate-700/60 bg-slate-800/30"
+            class="rounded-lg pl-3 pr-3 py-3 border border-slate-700/60 bg-slate-800/30"
             style="border-left: 3px solid rgba(56, 189, 248, 0.5);"
           >
-            <h3 class="text-xs font-semibold text-slate-400 uppercase mb-3">
+            <h3 class="text-xs font-semibold text-slate-400 uppercase mb-2">
               Počasí
             </h3>
-            <div class="flex items-start gap-3">
-              <span class="text-xl shrink-0" aria-hidden="true">{{ weatherEmoji(assessment.weatherData.weatherId) }}</span>
+            <div class="flex items-start gap-2">
+              <span class="text-lg shrink-0" aria-hidden="true">{{ weatherEmoji(assessment.weatherData.weatherId) }}</span>
               <div class="min-w-0 flex-1 space-y-0">
-                <div class="text-sm font-medium text-slate-200 mb-1">
+                <div class="text-xs font-medium text-slate-200 mb-0.5">
                   {{ weatherTypeLabel(assessment.weatherData) }}
                 </div>
                 <div
                   v-if="weatherImpact > 0"
-                  class="text-xs text-sky-400/90 mb-2"
+                  class="text-xs text-sky-400/90 mb-1"
                 >
                   +{{ weatherImpact }} bodů do risk skóre
                 </div>
@@ -512,113 +607,19 @@ function handleFocusMap() {
             </div>
           </div>
 
-          <!-- LIVE DATA -->
-          <div>
-            <h3 class="text-xs font-semibold text-slate-400 uppercase mb-3">
-              Živá data
-            </h3>
-            <div class="space-y-0">
-              <div class="flex justify-between items-center py-2 border-b border-slate-800">
-                <span class="text-sm text-slate-400">Rychlost</span>
-                <span class="text-sm font-medium text-slate-200">{{ assessment.speed }} km/h</span>
-              </div>
-              <div class="flex justify-between items-center py-2 border-b border-slate-800">
-                <span class="text-sm text-slate-400">Souřadnice</span>
-                <span class="text-xs font-mono text-slate-400">
-                  {{ assessment.position.latitude }}, {{ assessment.position.longitude }}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <!-- FUEL MONITORING -->
-          <div>
-            <h3 class="text-xs font-semibold text-slate-400 uppercase mb-3">
-              ⛽ Palivo
-            </h3>
-
-            <!-- Loading -->
-            <div
-              v-if="fuelLoading"
-              class="text-sm text-slate-500 animate-pulse"
-            >
-              Načítám data paliva…
-            </div>
-
-            <!-- Error -->
-            <div
-              v-else-if="fuelError"
-              class="text-sm text-slate-500 italic"
-            >
-              Data paliva nejsou dostupná
-            </div>
-
-            <!-- No anomaly -->
-            <div
-              v-else-if="fuelResult && fuelResult.severity === 'none'"
-            >
-              <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-900/30 border border-green-700 text-green-400 text-xs font-semibold">
-                <span class="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0"></span>
-                Palivo v normě
-              </div>
-              <p class="mt-2 text-[11px] text-slate-500">
-                Poslední kontrola: {{ formatRelativeTime(fuelLastTimestamp) ?? "Čas kontroly není k dispozici" }}
-              </p>
-            </div>
-
-            <!-- Medium severity -->
-            <div
-              v-else-if="fuelResult && fuelResult.severity === 'medium'"
-              class="flex items-start gap-3 px-4 py-3 rounded-lg bg-yellow-900/30 border border-yellow-700"
-            >
-              <span class="text-yellow-400 text-base flex-shrink-0">⚠️</span>
-              <div>
-                <p class="text-xs font-semibold text-yellow-400 mb-0.5">
-                  Zvýšená spotřeba paliva
-                </p>
-                <p class="text-xs text-yellow-300/80">
-                  {{ fuelResult.description ?? "Spotřeba paliva neodpovídá aktuální rychlosti vozidla" }}
-                </p>
-                <p class="mt-1.5 text-[11px] text-yellow-500/60">
-                  Poslední kontrola: {{ formatRelativeTime(fuelLastTimestamp) ?? "Čas kontroly není k dispozici" }}
-                </p>
-              </div>
-            </div>
-
-            <!-- High severity -->
-            <div
-              v-else-if="fuelResult && fuelResult.severity === 'high'"
-              class="flex items-start gap-3 px-4 py-3 rounded-lg bg-red-900/30 border border-red-700"
-            >
-              <span class="text-red-400 text-base flex-shrink-0">🚨</span>
-              <div>
-                <p class="text-xs font-semibold text-red-400 mb-0.5">
-                  Podezřelý úbytek paliva
-                </p>
-                <p class="text-xs text-red-300/80">
-                  {{ fuelResult.description ?? "Náhlý pokles objemu paliva bez odpovídající jízdy" }}
-                </p>
-                <p class="mt-1.5 text-[11px] text-red-500/60">
-                  Poslední kontrola: {{ formatRelativeTime(fuelLastTimestamp) ?? "Čas kontroly není k dispozici" }}
-                </p>
-              </div>
-            </div>
-
-          </div>
-
         </div>
 
         <!-- ACTIONS FOOTER -->
-        <div class="p-6 border-t border-slate-800 flex gap-3">
+        <div class="p-4 border-t border-slate-800 flex gap-3">
           <button
-            class="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-medium transition"
+            class="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-medium transition"
             @click="handleFocusMap"
           >
             <span>📍</span>
             <span>Zobrazit na mapě</span>
           </button>
           <button
-            class="px-4 py-2.5 rounded-lg border border-slate-700 hover:border-slate-600 text-slate-400 hover:text-slate-200 text-sm transition"
+            class="px-3 py-2 rounded-lg border border-slate-700 hover:border-slate-600 text-slate-400 hover:text-slate-200 text-sm transition"
             @click="emit('close')"
           >
             Zavřít
@@ -632,6 +633,28 @@ function handleFocusMap() {
 </template>
 
 <style scoped>
+.drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 900;
+}
+.drawer-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: 400px;
+  z-index: 1000;
+  background: rgb(15 23 42);
+  border-left: 1px solid rgb(51 65 85);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: transform 0.3s ease-out;
+}
+
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.2s ease;
@@ -643,7 +666,7 @@ function handleFocusMap() {
 
 .drawer-enter-active,
 .drawer-leave-active {
-  transition: transform 0.25s ease;
+  transition: transform 0.3s ease-out;
 }
 .drawer-enter-from,
 .drawer-leave-to {

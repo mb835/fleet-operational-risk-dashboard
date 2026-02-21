@@ -19,10 +19,12 @@ interface Props {
   assessments: RiskAssessment[];
   focusCoordinates?: { latitude: number; longitude: number } | null;
   weatherRiskEnabled?: boolean;
+  drawerOpen?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   weatherRiskEnabled: false,
+  drawerOpen: false,
 });
 
 const emit = defineEmits<{
@@ -38,6 +40,18 @@ const mapInstance  = ref<L.Map | null>(null);
 const clusterGroup = ref<L.MarkerClusterGroup | null>(null);
 const mapFocus     = ref<"europe" | "czech">("europe");
 const isMapDestroyed = ref(false);
+const isOpeningDetail = ref(false);
+
+function handleOpenDetail(vehicleId: string, button: HTMLButtonElement) {
+  if (isOpeningDetail.value) return;
+  isOpeningDetail.value = true;
+  button.classList.add("opacity-70", "cursor-wait");
+  setTimeout(() => {
+    emit("open-detail", vehicleId);
+    isOpeningDetail.value = false;
+    button.classList.remove("opacity-70", "cursor-wait");
+  }, 180);
+}
 let focusTimeout: ReturnType<typeof setTimeout> | null = null;
 
 /* -------------------------
@@ -187,7 +201,7 @@ function renderMarkers() {
   🛠 ${serviceStatusLabel(svc.serviceStatus)}
 </div>
 ${isServiceCritical ? `
-<button data-vehicle-id="${assessment.vehicleId}" style="margin-top:6px;background:#ef4444;color:white;border:none;padding:6px 10px;font-size:12px;border-radius:6px;cursor:pointer;">
+<button data-vehicle-id="${assessment.vehicleId}" class="popup-detail-btn transition-all duration-200 active:scale-95 hover:brightness-110" style="margin-top:6px;background:#ef4444;color:white;border:none;padding:6px 10px;font-size:12px;border-radius:6px;cursor:pointer;">
   Otevřít detail vozidla
 </button>
 ` : ""}
@@ -236,7 +250,7 @@ ${isServiceCritical ? `
       if (!vehicleId) return;
 
       button.onclick = () => {
-        emit("open-detail", vehicleId);
+        handleOpenDetail(vehicleId, button);
       };
     });
 
@@ -329,6 +343,16 @@ watch(mapFocus, () => {
   renderMarkers();
 });
 
+watch(
+  () => props.drawerOpen,
+  (isOpen) => {
+    if (isOpen && mapInstance.value) {
+      mapInstance.value.closePopup();
+    }
+  },
+  { immediate: true }
+);
+
 </script>
 
 <template>
@@ -355,7 +379,7 @@ watch(mapFocus, () => {
     <div
       ref="mapContainer"
       class="w-full rounded-xl overflow-hidden bg-slate-900 relative"
-      style="height: 600px;"
+      style="height: 600px; z-index: 0;"
     >
       <div
         v-if="props.assessments.length === 0"
