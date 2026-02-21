@@ -118,7 +118,11 @@ export function calculateRisk(
   }
 
   if (weatherPoints > 0) {
-    reasons.push({ type: "weather", value: weatherPoints });
+    reasons.push({
+      type: "weather",
+      value: weatherPoints,
+      weatherId: weatherData?.weatherId,
+    });
   }
 
   if (weatherEnabled) {

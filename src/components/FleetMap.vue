@@ -17,9 +17,16 @@ import { getVehicleIcon } from "../utils/mapIcons";
 interface Props {
   assessments: RiskAssessment[];
   focusCoordinates?: { latitude: number; longitude: number } | null;
+  weatherRiskEnabled?: boolean;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  weatherRiskEnabled: false,
+});
+
+const emit = defineEmits<{
+  (e: "open-detail", vehicleId: string): void;
+}>();
 
 /* -------------------------
    STATE
@@ -45,6 +52,18 @@ function getRiskLabel(level: RiskLevel): string {
     case "critical":
       return "Kritické";
   }
+}
+
+function getWeatherName(w: { weatherId: number; weatherMain?: string }): string {
+  const id = w.weatherId;
+  if (id >= 200 && id <= 299) return "Bouřka";
+  if (id >= 300 && id <= 599) return "Déšť";
+  if (id >= 600 && id <= 699) return "Sníh";
+  if (id >= 700 && id <= 799) return "Mlha";
+  const main = String(w.weatherMain ?? "").toLowerCase();
+  if (main === "clear") return "Jasno";
+  if (main === "clouds") return "Oblačno";
+  return "Neznámé podmínky";
 }
 
 function getRiskColor(level: RiskLevel): string {
@@ -127,9 +146,21 @@ function renderMarkers() {
 
     const vehicleType = getVehicleType(assessment.vehicleName);
     const vehicleTypeCzech = getVehicleTypeCzech(assessment.vehicleName);
-    const icon = getVehicleIcon(vehicleType, assessment.riskLevel, assessment.serviceInfo?.serviceStatus)
+    const weatherReason = assessment.reasons?.find((r) => r.type === "weather");
+    const hasWeatherBadge =
+      props.weatherRiskEnabled &&
+      assessment.reasons.some(
+        (r) => r.type === "weather" && Number(r.value) > 0
+      );
+    const weatherId = (assessment as { weatherData?: { weatherId?: number } }).weatherData?.weatherId;
+    const icon = getVehicleIcon(
+      vehicleType,
+      assessment.riskLevel,
+      assessment.serviceInfo?.serviceStatus,
+      !!hasWeatherBadge,
+      weatherId
+    );
 
-    const weatherReason = assessment.reasons.find((r) => r.type === "weather");
     const weatherContribution =
       weatherReason && Number(weatherReason.value) > 0
         ? Number(weatherReason.value)
@@ -142,7 +173,51 @@ function renderMarkers() {
         ? `<strong>Risk Score:</strong> ${assessment.riskScore} <span style="color:#38bdf8;font-size:10px;">(+${weatherContribution} počasí)</span>`
         : `<strong>Risk Score:</strong> ${assessment.riskScore}`;
 
-    const popupContent = `
+    const w = (assessment as { weatherData?: { temperature: number; windSpeed: number; precipitation: number; weatherId: number; weatherMain?: string } }).weatherData;
+    const showWeatherBlock =
+      props.weatherRiskEnabled === true &&
+      weatherContribution > 0 &&
+      w != null;
+
+    const bump = weatherContribution;
+    const bumpLabel = bump === 1 ? "1 bod" : bump >= 2 && bump <= 4 ? `${bump} body` : `${bump} bodů`;
+    const weatherBlock = showWeatherBlock
+      ? `<div style="margin-top:8px;padding:8px;border-radius:8px;background:#f1f5f9;font-size:12px;">
+  <div><strong>Počasí:</strong> <span style="color:#38bdf8;">${getWeatherName(w)} (+${bumpLabel})</span></div>
+  <div>Teplota: ${Math.round(w.temperature)} °C</div>
+  <div>Vítr: ${Number(w.windSpeed).toFixed(1)} m/s</div>
+  <div>Srážky: ${Number(w.precipitation).toFixed(1)} mm</div>
+</div>`
+      : "";
+
+    const needsService =
+      (assessment as { serviceInfo?: { serviceStatus: string } }).serviceInfo?.serviceStatus === "critical";
+
+    const serviceSection = needsService
+      ? `
+    <hr style="margin:8px 0;border-color:#ef4444;" />
+    <div style="color:#ef4444;font-weight:600;font-size:12px;">
+      ✖ Servis nutný
+    </div>
+    <button 
+      data-vehicle-id="${assessment.vehicleId}"
+      style="
+        margin-top:6px;
+        background:#ef4444;
+        color:white;
+        border:none;
+        padding:6px 10px;
+        font-size:12px;
+        border-radius:6px;
+        cursor:pointer;
+      "
+    >
+      Otevřít detail vozidla
+    </button>
+  `
+      : "";
+
+    const fullPopupContent = `
       <div style="font-family: system-ui; min-width: 220px;">
         <div style="font-weight:600;margin-bottom:6px;">
           ${assessment.vehicleName}
@@ -151,10 +226,7 @@ function renderMarkers() {
           ${assessment.spz || "Bez SPZ"}
         </div>
         <div style="font-size:12px;">
-          <strong>Typ:</strong> ${
-            vehicleTypeCzech.charAt(0).toUpperCase() +
-            vehicleTypeCzech.slice(1)
-          }
+          <strong>Typ:</strong> ${vehicleTypeCzech.charAt(0).toUpperCase() + vehicleTypeCzech.slice(1)}
         </div>
         <div style="font-size:12px;">
           <strong>Rychlost:</strong> ${assessment.speed} km/h
@@ -163,16 +235,33 @@ function renderMarkers() {
           ${riskScoreLine}
         </div>
         <div style="font-size:12px;color:${getRiskColor(assessment.riskLevel)};">
-          <strong>Riziko:</strong> ${getRiskLabel(
-            assessment.riskLevel
-          )}
+          <strong>Riziko:</strong> ${getRiskLabel(assessment.riskLevel)}
         </div>
+        ${weatherBlock}
+        ${serviceSection}
       </div>
     `;
 
-    if (map) {
-      marker.bindPopup(popupContent);
-    }
+    marker.bindPopup(fullPopupContent);
+
+    marker.on("popupopen", (e) => {
+      const popupElement = e.popup.getElement();
+      if (!popupElement) return;
+
+      const button = popupElement.querySelector<HTMLButtonElement>(
+        "button[data-vehicle-id]"
+      );
+
+      if (!button) return;
+
+      const vehicleId = button.getAttribute("data-vehicle-id");
+      if (!vehicleId) return;
+
+      button.onclick = () => {
+        emit("open-detail", vehicleId);
+      };
+    });
+
     cluster.addLayer(marker);
   });
 
@@ -251,6 +340,11 @@ watch(
   () => props.assessments,
   () => renderMarkers(),
   { deep: true }
+);
+
+watch(
+  () => props.weatherRiskEnabled,
+  () => renderMarkers()
 );
 
 watch(mapFocus, () => {

@@ -77,6 +77,25 @@ const showWeatherBadge = computed(
   () => props.weatherRiskEnabled && weatherImpact.value > 0,
 );
 
+const showWeatherSection = computed(
+  () =>
+    props.weatherRiskEnabled === true &&
+    weatherReasons.value.length > 0 &&
+    props.assessment?.weatherData != null,
+);
+
+function weatherTypeLabel(w: { weatherId: number; weatherMain?: string }): string {
+  const id = w.weatherId;
+  if (id >= 200 && id <= 299) return "Bouřka";
+  if (id >= 300 && id <= 599) return "Déšť";
+  if (id >= 600 && id <= 699) return "Sníh";
+  if (id >= 700 && id <= 799) return "Mlha";
+  const main = String(w.weatherMain ?? "").toLowerCase();
+  if (main === "clear") return "Jasno";
+  if (main === "clouds") return "Oblačno";
+  return "Neznámé podmínky";
+}
+
 /* -------------------------
    ANIMATED RISK SCORE
 -------------------------- */
@@ -377,6 +396,35 @@ function handleFocusMap() {
                 <span class="text-xs font-mono text-slate-400">
                   {{ assessment.position.latitude }}, {{ assessment.position.longitude }}
                 </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- WEATHER -->
+          <div v-if="showWeatherSection && assessment?.weatherData">
+            <h3 class="text-xs font-semibold text-slate-400 uppercase mb-3">
+              Počasí
+            </h3>
+            <div class="space-y-0">
+              <div class="flex justify-between items-center py-2 border-b border-slate-800">
+                <span class="text-sm text-slate-400">Typ počasí</span>
+                <span class="text-sm text-slate-200">{{ weatherTypeLabel(assessment.weatherData) }}</span>
+              </div>
+              <div class="flex justify-between items-center py-2 border-b border-slate-800">
+                <span class="text-sm text-slate-400">Teplota</span>
+                <span class="text-sm text-slate-200">{{ Math.round(assessment.weatherData.temperature) }} °C</span>
+              </div>
+              <div class="flex justify-between items-center py-2 border-b border-slate-800">
+                <span class="text-sm text-slate-400">Vítr</span>
+                <span class="text-sm text-slate-200">{{ assessment.weatherData.windSpeed }} m/s</span>
+              </div>
+              <div class="flex justify-between items-center py-2 border-b border-slate-800">
+                <span class="text-sm text-slate-400">Srážky</span>
+                <span class="text-sm text-slate-200">{{ assessment.weatherData.precipitation }} mm</span>
+              </div>
+              <div class="flex justify-between items-center py-2">
+                <span class="text-sm text-slate-400">Příspěvek k riziku</span>
+                <span class="text-sm text-slate-200">+{{ weatherImpact }} bodů</span>
               </div>
             </div>
           </div>

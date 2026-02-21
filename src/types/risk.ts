@@ -18,11 +18,23 @@ export interface ServiceInfo {
   serviceStatus: ServiceStatus;
 }
 
+/** Optional weather data attached to assessment when available (for drawer display). */
+export interface AssessmentWeatherData {
+  temperature: number;
+  windSpeed: number;
+  precipitation: number;
+  weatherId: number;
+  weatherMain?: string;
+}
+
 /**
  * Local extension of RiskAssessment with maintenance data.
  * Computed client-side — do NOT persist or send to backend.
  */
-export type AssessmentWithService = RiskAssessment & { serviceInfo: ServiceInfo };
+export type AssessmentWithService = RiskAssessment & {
+  serviceInfo: ServiceInfo;
+  weatherData?: AssessmentWeatherData;
+};
 
 export type RiskReasonType =
   | "speedExtreme"
@@ -43,6 +55,8 @@ export interface RiskReason {
    * Example: 3 eco events in last 24h
    */
   count?: number;
+  /** Optional weatherId (OpenWeatherMap) for weather reasons; used for icon mapping. */
+  weatherId?: number;
 }
 
 export interface RiskAssessment {

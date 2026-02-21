@@ -51,6 +51,17 @@ function openDrawer(assessment: AssessmentWithService) {
   drawerOpen.value = true;
 }
 
+function handleOpenVehicleDetail(vehicleId: string) {
+  const found = riskAssessments.value.find(
+    (v) => v.vehicleId === vehicleId
+  );
+
+  if (!found) return;
+
+  selectedVehicle.value = found;
+  drawerOpen.value = true;
+}
+
 function handleFocusFromDrawer(coords: { latitude: number; longitude: number }) {
   focusCoordinates.value = coords;
   currentView.value = "map";
@@ -137,9 +148,21 @@ const riskAssessments = computed<AssessmentWithService[]>(() =>
       item.weatherData,
       weatherRiskEnabled.value
     );
+    const w = item.weatherData;
+    const weatherData =
+      w != null
+        ? {
+            temperature: w.temperature,
+            windSpeed: w.windSpeed,
+            precipitation: w.precipitation,
+            weatherId: w.weatherId,
+            weatherMain: w.weatherMain,
+          }
+        : undefined;
     return {
       ...assessment,
       serviceInfo: item.serviceInfo,
+      weatherData,
     };
   })
 );
@@ -269,6 +292,10 @@ const systemInsight = computed(() => {
     return "Hlavní zdroj rizika: překročení rychlosti.";
   }
   return "Provoz vyžaduje pozornost.";
+});
+
+const weatherContextLine = computed(() => {
+  return "Počasí se vyhodnocuje individuálně podle lokace vozidel.";
 });
 
 const lastUpdateText = computed(() => {
@@ -460,27 +487,35 @@ function focusVehicleOnMap(assessment: RiskAssessment) {
       <div class="flex items-center gap-6">
         <div
           v-if="!loading && currentView === 'dashboard'"
-          class="flex items-center gap-2"
+          class="flex flex-col gap-1"
         >
-          <button
-            type="button"
-            role="switch"
-            :aria-checked="weatherRiskEnabled"
-            class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border border-slate-600 transition focus:outline-none"
-            :class="weatherRiskEnabled ? 'bg-blue-600/80' : 'bg-slate-800'"
-            @click="weatherRiskEnabled = !weatherRiskEnabled"
-          >
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              role="switch"
+              :aria-checked="weatherRiskEnabled"
+              class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border border-slate-600 transition focus:outline-none"
+              :class="weatherRiskEnabled ? 'bg-blue-600/80' : 'bg-slate-800'"
+              @click="weatherRiskEnabled = !weatherRiskEnabled"
+            >
+              <span
+                class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white transition duration-200"
+                :class="weatherRiskEnabled ? 'translate-x-4' : 'translate-x-0.5'"
+              />
+            </button>
             <span
-              class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white transition duration-200"
-              :class="weatherRiskEnabled ? 'translate-x-4' : 'translate-x-0.5'"
-            />
-          </button>
-          <span
-            class="text-xs text-slate-500"
-            :class="weatherRiskEnabled ? 'text-blue-400' : ''"
+              class="text-xs text-slate-500"
+              :class="weatherRiskEnabled ? 'text-blue-400' : ''"
+            >
+              ☁ Počasí
+            </span>
+          </div>
+          <p
+            v-if="weatherRiskEnabled"
+            class="text-sm text-slate-500/70"
           >
-            ☁ Počasí
-          </span>
+            {{ weatherContextLine }}
+          </p>
         </div>
         <div
           class="flex rounded-lg overflow-hidden border border-slate-700/50 bg-slate-900"
@@ -849,44 +884,54 @@ function focusVehicleOnMap(assessment: RiskAssessment) {
     <div v-else class="space-y-6">
 
       <!-- WEATHER RISK TOGGLE -->
-      <div class="flex items-center gap-3 mb-4">
-        <button
-          type="button"
-          role="switch"
-          :aria-checked="weatherRiskEnabled"
-          class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none"
-          :class="weatherRiskEnabled ? 'bg-blue-600' : 'bg-slate-600'"
-          @click="weatherRiskEnabled = !weatherRiskEnabled"
-        >
+      <div class="flex flex-col gap-1 mb-4">
+        <div class="flex items-center gap-3">
+          <button
+            type="button"
+            role="switch"
+            :aria-checked="weatherRiskEnabled"
+            class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none"
+            :class="weatherRiskEnabled ? 'bg-blue-600' : 'bg-slate-600'"
+            @click="weatherRiskEnabled = !weatherRiskEnabled"
+          >
+            <span
+              class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow transition duration-200"
+              :class="weatherRiskEnabled ? 'translate-x-5' : 'translate-x-0'"
+            />
+          </button>
+
           <span
-            class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow transition duration-200"
-            :class="weatherRiskEnabled ? 'translate-x-5' : 'translate-x-0'"
-          />
-        </button>
+            class="text-sm text-slate-300 cursor-pointer select-none"
+            :title="'Přidá kontextový rizikový faktor podle aktuálního počasí v lokaci vozidla.'"
+            @click="weatherRiskEnabled = !weatherRiskEnabled"
+          >
+            Zohlednit počasí v risk skóre
+          </span>
 
-        <span
-          class="text-sm text-slate-300 cursor-pointer select-none"
-          :title="'Přidá kontextový rizikový faktor podle aktuálního počasí v lokaci vozidla.'"
-          @click="weatherRiskEnabled = !weatherRiskEnabled"
+          <span
+            :class="weatherRiskEnabled ? 'weather-active' : 'weather-inactive'"
+          >
+            {{ weatherRiskEnabled ? 'Aktivní' : 'Neaktivní' }}
+          </span>
+
+          <span
+            class="text-slate-500 cursor-help text-sm"
+            title="Přidá kontextový rizikový faktor podle aktuálního počasí v lokaci vozidla."
+          >ⓘ</span>
+        </div>
+        <p
+          v-if="weatherRiskEnabled"
+          class="text-sm text-slate-500/70"
         >
-          Zohlednit počasí v risk skóre
-        </span>
-
-        <span
-          :class="weatherRiskEnabled ? 'weather-active' : 'weather-inactive'"
-        >
-          {{ weatherRiskEnabled ? 'Aktivní' : 'Neaktivní' }}
-        </span>
-
-        <span
-          class="text-slate-500 cursor-help text-sm"
-          title="Přidá kontextový rizikový faktor podle aktuálního počasí v lokaci vozidla."
-        >ⓘ</span>
+          {{ weatherContextLine }}
+        </p>
       </div>
 
       <FleetMap
         :assessments="filteredAssessments"
         :focus-coordinates="focusCoordinates"
+        :weather-risk-enabled="weatherRiskEnabled"
+        @open-detail="handleOpenVehicleDetail"
       />
     </div>
 
