@@ -21,6 +21,7 @@ const props = withDefaults(defineProps<Props>(), { weatherRiskEnabled: false });
 const emit = defineEmits<{
   close: [];
   "focus-map": [coords: { latitude: number; longitude: number }];
+  "open-service-detail": [];
 }>();
 
 /* -------------------------
@@ -73,10 +74,6 @@ const visibleReasons = computed(() => {
   });
 });
 
-const showWeatherBadge = computed(
-  () => props.weatherRiskEnabled && weatherImpact.value > 0,
-);
-
 const showWeatherSection = computed(
   () =>
     props.weatherRiskEnabled === true &&
@@ -94,6 +91,15 @@ function weatherTypeLabel(w: { weatherId: number; weatherMain?: string }): strin
   if (main === "clear") return "Jasno";
   if (main === "clouds") return "Oblačno";
   return "Neznámé podmínky";
+}
+
+function weatherEmoji(weatherId?: number): string {
+  if (weatherId == null || typeof weatherId !== "number") return "☁️";
+  if (weatherId >= 200 && weatherId <= 299) return "⛈️";
+  if (weatherId >= 600 && weatherId <= 699) return "❄️";
+  if (weatherId >= 300 && weatherId <= 599) return "🌧️";
+  if (weatherId >= 700 && weatherId <= 799) return "🌫️";
+  return "☁️";
 }
 
 /* -------------------------
@@ -149,6 +155,15 @@ function riskBadgeClass(level: RiskLevel): string {
   }
 }
 
+function riskBorderColor(level: RiskLevel): string {
+  switch (level) {
+    case "ok":       return "#22c55e";
+    case "warning":  return "#eab308";
+    case "critical": return "#ef4444";
+    default:         return "#64748b";
+  }
+}
+
 function formatRiskLevel(level: RiskLevel): string {
   switch (level) {
     case "ok":       return "V pořádku";
@@ -189,7 +204,7 @@ function formatWeatherReasonDisplay(r: RiskReason): string | null {
   if (r.value == null || r.value === "") return null;
   const num = Number(r.value);
   if (isNaN(num) || num <= 0) return null;
-  return `Počasí: +${r.value} bodů`;
+  return `+${r.value} počasí`;
 }
 
 function reasonText(r: RiskReason | null | undefined): string | null {
@@ -347,92 +362,61 @@ function handleFocusMap() {
           </button>
         </div>
 
-        <!-- RISK SUMMARY BAR -->
-        <div class="flex items-center justify-between px-6 py-3 bg-slate-800/50 border-b border-slate-800">
-          <span
-            class="px-3 py-1 rounded-full text-xs font-semibold"
-            :class="riskBadgeClass(assessment.riskLevel)"
-          >
-            {{ formatRiskLevel(assessment.riskLevel) }}
-          </span>
-          <div
-            class="text-right"
-            :class="{ 'score-pulse': scorePulse }"
-          >
-            <div class="flex items-baseline justify-end gap-2">
-              <span class="text-2xl font-bold text-slate-100 inline-block min-w-[1.5ch]">
-                {{ animatedScore }}
-              </span>
-              <transition name="fade-slide" mode="out-in">
-                <span
-                  v-if="showWeatherBadge"
-                  key="badge"
-                  class="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full"
-                  style="background: rgba(59, 130, 246, 0.15); color: #3B82F6;"
-                >
-                  +{{ weatherImpact }} počasí
-                </span>
-              </transition>
-            </div>
-            <div class="text-[10px] text-slate-500 uppercase">Risk Score</div>
-          </div>
-        </div>
-
         <!-- SCROLLABLE BODY -->
         <div class="flex-1 overflow-y-auto p-6 space-y-6">
 
-          <!-- LIVE DATA -->
-          <div>
-            <h3 class="text-xs font-semibold text-slate-400 uppercase mb-3">
-              Živá data
-            </h3>
-            <div class="space-y-0">
-              <div class="flex justify-between items-center py-2 border-b border-slate-800">
-                <span class="text-sm text-slate-400">Rychlost</span>
-                <span class="text-sm font-medium text-slate-200">{{ assessment.speed }} km/h</span>
-              </div>
-              <div class="flex justify-between items-center py-2 border-b border-slate-800">
-                <span class="text-sm text-slate-400">Souřadnice</span>
-                <span class="text-xs font-mono text-slate-400">
-                  {{ assessment.position.latitude }}, {{ assessment.position.longitude }}
+          <!-- ---------------------------------------
+               RISK SECTION
+          --------------------------------------- -->
+          <div
+            class="rounded-lg bg-slate-800/60 pl-4 pr-4 py-4 border-l-4"
+            :style="{ borderLeftColor: riskBorderColor(assessment.riskLevel) }"
+          >
+            <div class="flex items-start justify-between gap-4 mb-3">
+              <span
+                class="px-3 py-1 rounded-full text-xs font-semibold shrink-0"
+                :class="riskBadgeClass(assessment.riskLevel)"
+              >
+                {{ formatRiskLevel(assessment.riskLevel) }}
+              </span>
+              <div class="text-right shrink-0" :class="{ 'score-pulse': scorePulse }">
+                <span class="text-3xl font-bold text-slate-100 tabular-nums">
+                  {{ animatedScore }}
                 </span>
+                <div class="text-[10px] text-slate-500 uppercase mt-0.5">Risk Score</div>
               </div>
             </div>
+            <ul
+              v-if="visibleReasons.length > 0"
+              class="reasons-list space-y-1.5 text-sm text-slate-300 mt-3 pt-3 border-t border-slate-700"
+            >
+              <li
+                v-for="reason in visibleReasons"
+                :key="reason.type + String(reason.value)"
+                class="py-1"
+              >
+                {{ reasonText(reason) }}
+                <span
+                  v-if="reason.type === 'weather' && !props.weatherRiskEnabled"
+                  class="text-slate-500 ml-2"
+                >
+                  (nezohledněno)
+                </span>
+              </li>
+            </ul>
           </div>
 
-          <!-- WEATHER -->
-          <div v-if="showWeatherSection && assessment?.weatherData">
-            <h3 class="text-xs font-semibold text-slate-400 uppercase mb-3">
-              Počasí
-            </h3>
-            <div class="space-y-0">
-              <div class="flex justify-between items-center py-2 border-b border-slate-800">
-                <span class="text-sm text-slate-400">Typ počasí</span>
-                <span class="text-sm text-slate-200">{{ weatherTypeLabel(assessment.weatherData) }}</span>
-              </div>
-              <div class="flex justify-between items-center py-2 border-b border-slate-800">
-                <span class="text-sm text-slate-400">Teplota</span>
-                <span class="text-sm text-slate-200">{{ Math.round(assessment.weatherData.temperature) }} °C</span>
-              </div>
-              <div class="flex justify-between items-center py-2 border-b border-slate-800">
-                <span class="text-sm text-slate-400">Vítr</span>
-                <span class="text-sm text-slate-200">{{ assessment.weatherData.windSpeed }} m/s</span>
-              </div>
-              <div class="flex justify-between items-center py-2 border-b border-slate-800">
-                <span class="text-sm text-slate-400">Srážky</span>
-                <span class="text-sm text-slate-200">{{ assessment.weatherData.precipitation }} mm</span>
-              </div>
-              <div class="flex justify-between items-center py-2">
-                <span class="text-sm text-slate-400">Příspěvek k riziku</span>
-                <span class="text-sm text-slate-200">+{{ weatherImpact }} bodů</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- SERVICE & MAINTENANCE -->
-          <div v-if="svc">
-            <h3 class="text-xs font-semibold text-slate-400 uppercase mb-3">
-              🛠 Servis &amp; údržba
+          <!-- ---------------------------------------
+               SERVICE SECTION
+          --------------------------------------- -->
+          <div
+            v-if="svc"
+            class="rounded-lg pl-4 pr-4 py-4 border border-slate-700/60"
+            :class="{ 'bg-red-900/15': svc.serviceStatus === 'critical' }"
+          >
+            <h3 class="text-xs font-semibold text-slate-400 uppercase mb-3 flex items-center gap-2">
+              <span>🛠</span>
+              <span>Servis &amp; údržba</span>
             </h3>
 
             <div class="space-y-0">
@@ -459,7 +443,6 @@ function handleFocusMap() {
               </div>
             </div>
 
-            <!-- Progress bar — only rendered when interval percentage is computable -->
             <div class="mt-4">
               <div class="flex justify-between text-[11px] text-slate-500 mb-1.5">
                 <span>Interval servisu</span>
@@ -482,6 +465,69 @@ function handleFocusMap() {
               <p v-else class="text-[11px] text-slate-500 italic mt-1">
                 Interval nelze určit – chybí údaj o posledním servisu
               </p>
+            </div>
+
+            <button
+              v-if="svc.serviceStatus === 'critical'"
+              type="button"
+              class="mt-4 w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-red-900/40 border border-red-700/60 hover:bg-red-900/50 text-red-300 text-sm font-medium transition"
+              @click="emit('open-service-detail')"
+            >
+              Otevřít servisní detail
+            </button>
+          </div>
+
+          <!-- ---------------------------------------
+               WEATHER SECTION
+          --------------------------------------- -->
+          <div
+            v-if="showWeatherSection && assessment?.weatherData"
+            class="rounded-lg pl-4 pr-4 py-4 border border-slate-700/60 bg-slate-800/30"
+            style="border-left: 3px solid rgba(56, 189, 248, 0.5);"
+          >
+            <h3 class="text-xs font-semibold text-slate-400 uppercase mb-3">
+              Počasí
+            </h3>
+            <div class="flex items-start gap-3">
+              <span class="text-xl shrink-0" aria-hidden="true">{{ weatherEmoji(assessment.weatherData.weatherId) }}</span>
+              <div class="min-w-0 flex-1 space-y-0">
+                <div class="text-sm font-medium text-slate-200 mb-1">
+                  {{ weatherTypeLabel(assessment.weatherData) }}
+                </div>
+                <div
+                  v-if="weatherImpact > 0"
+                  class="text-xs text-sky-400/90 mb-2"
+                >
+                  +{{ weatherImpact }} bodů do risk skóre
+                </div>
+                <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-400">
+                  <span>Teplota</span>
+                  <span class="text-slate-200">{{ Math.round(assessment.weatherData.temperature) }} °C</span>
+                  <span>Vítr</span>
+                  <span class="text-slate-200">{{ assessment.weatherData.windSpeed }} m/s</span>
+                  <span>Srážky</span>
+                  <span class="text-slate-200">{{ assessment.weatherData.precipitation }} mm</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- LIVE DATA -->
+          <div>
+            <h3 class="text-xs font-semibold text-slate-400 uppercase mb-3">
+              Živá data
+            </h3>
+            <div class="space-y-0">
+              <div class="flex justify-between items-center py-2 border-b border-slate-800">
+                <span class="text-sm text-slate-400">Rychlost</span>
+                <span class="text-sm font-medium text-slate-200">{{ assessment.speed }} km/h</span>
+              </div>
+              <div class="flex justify-between items-center py-2 border-b border-slate-800">
+                <span class="text-sm text-slate-400">Souřadnice</span>
+                <span class="text-xs font-mono text-slate-400">
+                  {{ assessment.position.latitude }}, {{ assessment.position.longitude }}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -558,32 +604,6 @@ function handleFocusMap() {
               </div>
             </div>
 
-          </div>
-
-          <!-- DŮVODY (reasons) -->
-          <div
-            v-if="visibleReasons.length > 0"
-            class="space-y-3"
-          >
-            <h3 class="text-xs font-semibold text-slate-400 uppercase mb-3">
-              Důvody
-            </h3>
-
-            <ul class="reasons-list space-y-1.5 text-sm text-slate-300">
-              <li
-                v-for="reason in visibleReasons"
-                :key="reason.type + String(reason.value)"
-                class="py-1.5 border-b border-slate-800 last:border-0"
-              >
-                {{ reasonText(reason) }}
-                <span
-                  v-if="reason.type === 'weather' && !props.weatherRiskEnabled"
-                  class="text-slate-500 ml-2"
-                >
-                  (nezohledněno)
-                </span>
-              </li>
-            </ul>
           </div>
 
         </div>

@@ -9,6 +9,7 @@ import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import type { RiskAssessment, RiskLevel } from "../types/risk";
 import { getVehicleType, getVehicleTypeCzech } from "../utils/vehicleType";
 import { getVehicleIcon } from "../utils/mapIcons";
+import { serviceStatusLabel } from "../services/maintenanceService";
 
 /* -------------------------
    PROPS
@@ -168,79 +169,56 @@ function renderMarkers() {
 
     const marker = L.marker([lat, lng], { icon });
 
+    const w = (assessment as { weatherData?: { temperature: number; windSpeed: number; precipitation: number; weatherId: number; weatherMain?: string } }).weatherData;
+    const weatherLabel = w ? getWeatherName(w) : "";
+    const svc = assessment.serviceInfo;
+    const showServiceSection = svc && svc.serviceStatus !== "ok";
+    const isServiceCritical = svc?.serviceStatus === "critical";
+
     const riskScoreLine =
       weatherContribution > 0
         ? `<strong>Risk Score:</strong> ${assessment.riskScore} <span style="color:#38bdf8;font-size:10px;">(+${weatherContribution} počasí)</span>`
         : `<strong>Risk Score:</strong> ${assessment.riskScore}`;
 
-    const w = (assessment as { weatherData?: { temperature: number; windSpeed: number; precipitation: number; weatherId: number; weatherMain?: string } }).weatherData;
-    const showWeatherBlock =
-      props.weatherRiskEnabled === true &&
-      weatherContribution > 0 &&
-      w != null;
-
-    const bump = weatherContribution;
-    const bumpLabel = bump === 1 ? "1 bod" : bump >= 2 && bump <= 4 ? `${bump} body` : `${bump} bodů`;
-    const weatherBlock = showWeatherBlock
-      ? `<div style="margin-top:8px;padding:8px;border-radius:8px;background:#f1f5f9;font-size:12px;">
-  <div><strong>Počasí:</strong> <span style="color:#38bdf8;">${getWeatherName(w)} (+${bumpLabel})</span></div>
-  <div>Teplota: ${Math.round(w.temperature)} °C</div>
-  <div>Vítr: ${Number(w.windSpeed).toFixed(1)} m/s</div>
-  <div>Srážky: ${Number(w.precipitation).toFixed(1)} mm</div>
-</div>`
+    const serviceSectionHtml = showServiceSection
+      ? `
+<hr style="margin:8px 0;border:0;border-top:1px solid #e2e8f0;" />
+<div style="color:#ef4444;font-weight:600;font-size:12px;">
+  🛠 ${serviceStatusLabel(svc.serviceStatus)}
+</div>
+${isServiceCritical ? `
+<button data-vehicle-id="${assessment.vehicleId}" style="margin-top:6px;background:#ef4444;color:white;border:none;padding:6px 10px;font-size:12px;border-radius:6px;cursor:pointer;">
+  Otevřít detail vozidla
+</button>
+` : ""}
+`
       : "";
 
-    const needsService =
-      (assessment as { serviceInfo?: { serviceStatus: string } }).serviceInfo?.serviceStatus === "critical";
-
-    const serviceSection = needsService
-      ? `
-    <hr style="margin:8px 0;border-color:#ef4444;" />
-    <div style="color:#ef4444;font-weight:600;font-size:12px;">
-      ✖ Servis nutný
-    </div>
-    <button 
-      data-vehicle-id="${assessment.vehicleId}"
-      style="
-        margin-top:6px;
-        background:#ef4444;
-        color:white;
-        border:none;
-        padding:6px 10px;
-        font-size:12px;
-        border-radius:6px;
-        cursor:pointer;
-      "
-    >
-      Otevřít detail vozidla
-    </button>
-  `
+    const weatherSectionHtml =
+      weatherContribution > 0 && w
+        ? `
+<hr style="margin:8px 0;border:0;border-top:1px solid #e2e8f0;" />
+<div style="font-size:12px;">
+  <span style="color:#38bdf8;"><strong>Počasí:</strong> ${weatherLabel} (+${weatherContribution} bodů)</span>
+</div>
+<div style="font-size:12px;">Teplota: ${Math.round(w.temperature)} °C</div>
+<div style="font-size:12px;">Vítr: ${Number(w.windSpeed).toFixed(1)} m/s</div>
+<div style="font-size:12px;">Srážky: ${Number(w.precipitation).toFixed(1)} mm</div>
+`
       : "";
 
     const fullPopupContent = `
-      <div style="font-family: system-ui; min-width: 220px;">
-        <div style="font-weight:600;margin-bottom:6px;">
-          ${assessment.vehicleName}
-        </div>
-        <div style="font-size:12px;color:#64748b;margin-bottom:6px;">
-          ${assessment.spz || "Bez SPZ"}
-        </div>
-        <div style="font-size:12px;">
-          <strong>Typ:</strong> ${vehicleTypeCzech.charAt(0).toUpperCase() + vehicleTypeCzech.slice(1)}
-        </div>
-        <div style="font-size:12px;">
-          <strong>Rychlost:</strong> ${assessment.speed} km/h
-        </div>
-        <div style="font-size:12px;">
-          ${riskScoreLine}
-        </div>
-        <div style="font-size:12px;color:${getRiskColor(assessment.riskLevel)};">
-          <strong>Riziko:</strong> ${getRiskLabel(assessment.riskLevel)}
-        </div>
-        ${weatherBlock}
-        ${serviceSection}
-      </div>
-    `;
+<div style="font-family:system-ui;min-width:200px;max-width:220px;padding:12px;">
+  <div style="font-weight:600;font-size:13px;margin-bottom:2px;">${assessment.vehicleName}</div>
+  <div style="font-size:11px;color:#64748b;margin-bottom:6px;">${assessment.spz || "Bez SPZ"}</div>
+  <div style="font-size:12px;"><strong>Typ:</strong> ${vehicleTypeCzech.charAt(0).toUpperCase() + vehicleTypeCzech.slice(1)}</div>
+  <div style="font-size:12px;"><strong>Rychlost:</strong> ${assessment.speed} km/h</div>
+  <div style="font-size:12px;">${riskScoreLine}</div>
+  <div style="font-size:12px;color:${getRiskColor(assessment.riskLevel)};"><strong>Riziko:</strong> ${getRiskLabel(assessment.riskLevel)}</div>
+  ${serviceSectionHtml}
+  ${weatherSectionHtml}
+</div>
+`;
 
     marker.bindPopup(fullPopupContent);
 

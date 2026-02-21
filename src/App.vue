@@ -945,6 +945,7 @@ function focusVehicleOnMap(assessment: RiskAssessment) {
     :weather-risk-enabled="weatherRiskEnabled"
     @close="drawerOpen = false"
     @focus-map="handleFocusFromDrawer"
+    @open-service-detail="() => {}"
   />
 
 </template>
