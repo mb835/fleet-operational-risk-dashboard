@@ -15,6 +15,7 @@ Aplikace je určena pro:
 - Provozní a risk management týmy  
 
 Většina GPS systémů ukazuje polohu a rychlost. To ale nestačí.  
+
 Operativní tým potřebuje rychle vědět:
 
 - Které vozidlo je problém?
