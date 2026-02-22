@@ -190,21 +190,21 @@ RiskNexus je základ profesionální fleet risk platformy – ne jen další das
 
 ---
 
-## 🛠 Local Setup
+## 🛠 Lokální spuštění
 
-### Requirements
+### Požadavky
 - Node.js 18+
 - npm 9+
 
-### Install
+### Instalace
 ```bash
 git clone https://github.com/your-username/risknexus.git
 cd risknexus
 npm install
 ```
 
-### Configure
-Create a `.env` file in the project root:
+### Konfigurace
+V kořenové složce projektu vytvoř soubor `.env`:
 
 ```env
 GPS_API_URL=...
@@ -213,7 +213,7 @@ GPS_API_PASSWORD=...
 WEATHER_API_KEY=...
 ```
 
-### Run
+### Spuštění
 
 Backend (Express proxy):
 ```bash
@@ -225,5 +225,5 @@ Frontend (Vite):
 npm run dev
 ```
 
-Frontend runs on:
+Frontend běží na:
 http://localhost:5173
