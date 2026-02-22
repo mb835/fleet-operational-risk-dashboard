@@ -85,15 +85,19 @@ Finální rozhodnutí a validace byly vždy manuální.
 
 ## 🔄 Development Workflow
 
-Vývoj probíhal iterativně s důrazem na stabilitu a kontrolu komplexity.
+Projekt byl vyvíjen postupně, po malých a kontrolovaných krocích,
+s důrazem na stabilitu a řízení komplexity.
 
-Typický cyklus:
+Každá změna měla jasně definovaný scope a byla ověřena
+před dalším rozšířením funkcionality.
+
+Typický vývojový cyklus:
 
 1. Definice problému (UX, rendering, business logika).
 2. Návrh řešení a posouzení architektonického dopadu.
-3. Cílená implementace s omezeným zásahem do kódu.
+3. Cílená implementace s minimálním zásahem do existujícího kódu.
 4. Manuální validace v reálném UI (Network, Console, edge cases).
-5. Commit až po stabilizaci.
+5. Commit až po stabilizaci změny.
 6. V případě nestability vědomý revert místo rychlého patchování.
 
 Priorita byla vždy:
