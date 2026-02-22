@@ -188,6 +188,7 @@ Projekt demonstruje:
 
 RiskNexus je základ profesionální fleet risk platformy – ne jen další dashboard nad API.
 
+---
 
 ## 🛠 Local Setup
 
