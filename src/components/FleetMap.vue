@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from "vue";
+import { ref, onMounted, onUnmounted, watch, nextTick } from "vue";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster";
@@ -53,6 +53,17 @@ function handleOpenDetail(vehicleId: string, button: HTMLButtonElement) {
   }, 180);
 }
 let focusTimeout: ReturnType<typeof setTimeout> | null = null;
+
+function resizeMapSafely() {
+  if (!mapInstance.value) return;
+
+  nextTick(() => {
+    setTimeout(() => {
+      if (!mapInstance.value || isMapDestroyed.value) return;
+      mapInstance.value.invalidateSize();
+    }, 100);
+  });
+}
 
 /* -------------------------
    RISK LABEL
@@ -302,17 +313,20 @@ function applyViewport(bounds: L.LatLngBounds, count: number) {
 onMounted(() => {
   initMap();
 
-  // Apply focus coordinates if provided at mount time.
-  // Runs after initMap() so the default view is overridden, not the other way around.
+  // Fix incorrect tile rendering when mounted inside hidden container
+  resizeMapSafely();
+
   if (props.focusCoordinates && mapInstance.value) {
     const { latitude, longitude } = props.focusCoordinates;
 
     focusTimeout = setTimeout(() => {
       if (!mapInstance.value || isMapDestroyed.value) return;
-      mapInstance.value.invalidateSize();
+
       mapInstance.value.setView([latitude, longitude], 15, {
         animate: false,
       });
+
+      resizeMapSafely();
       focusTimeout = null;
     }, 200);
   }
@@ -339,7 +353,10 @@ onUnmounted(() => {
 
 watch(
   () => props.assessments,
-  () => renderMarkers(),
+  () => {
+    renderMarkers();
+    resizeMapSafely();
+  },
   { deep: true }
 );
 
