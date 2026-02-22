@@ -31,10 +31,10 @@ Cílem je rychlá prioritizace zásahů bez nutnosti manuální analýzy dat.
 
 ## 🧠 Architektura
 
-### Frontend
-- Vue 3 + TypeScript  
-- TailwindCSS  
-- Leaflet + MarkerCluster  
+### 🎨 Frontend
+⚡ **Vue 3 + TypeScript**  
+🎨 **TailwindCSS**  
+🗺️ **Leaflet + MarkerCluster**  
 
 Hlavní moduly:
 - `riskEngine.ts`
