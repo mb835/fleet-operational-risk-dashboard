@@ -32,6 +32,7 @@ AI sloužila jako podpůrný nástroj pro zrychlení iterací, nicméně fináln
 4. Manuální validace (Network tab, Console, testování edge cases).
 5. Commit až po plné stabilizaci.
 
+---
 
 ## Na co jsem narazil a jak jsem to vyřešil
 
@@ -60,5 +61,6 @@ AI sloužila jako podpůrný nástroj pro zrychlení iterací, nicméně fináln
 * **Robustnost:** Zavedení unit testů pro risk model, integrace CI pipeline, striktnější validace vstupů.
 * **Škálování:** Přechod na WebSocket místo HTTP pollingu, server-side agregace, nasazení cache vrstvy.
 * **Risk model:** Rozšíření o live dopravní data, historické vzorce chování řidiče a prediktivní hodnocení.
+---
 
  Pro detailní technický rozpis viz [READMEV2.md](READMEV2.md).
