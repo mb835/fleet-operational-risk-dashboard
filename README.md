@@ -36,7 +36,7 @@ RiskNexus převádí surové provozní signály (rychlost, offline stav, servisn
 
 ---
 
-## Využití AI nástrojů
+## Workflow
 
 AI sloužila jako podpůrný nástroj pro zrychlení iterací, nicméně finální rozhodnutí a validace byly vždy manuální. Prompty do Cursoru byly psány v angličtině kvůli maximální terminologické přesnosti.
 
