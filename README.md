@@ -20,6 +20,7 @@ RiskNexus převádí surové provozní signály (rychlost, offline stav, servisn
 ## Jaké AI nástroje jsem použil a jak vypadal můj workflow
 
 AI sloužila jako podpůrný nástroj pro zrychlení iterací, nicméně finální rozhodnutí a validace byly vždy manuální. Prompty do Cursoru byly psány v angličtině kvůli maximální terminologické přesnosti.
+Pro zajištění konzistence a kvality kódu byl do projektu přidán soubor cursor-rules, který definuje striktní architektonické standardy a technologické postupy.
 
 **Nástroje:**
 * **ChatGPT:** Architektonické konzultace, návrh risk modelu, práce s edge cases.
